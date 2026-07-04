@@ -11,6 +11,7 @@ calibration setup can build shared-`f` triples (real-train, decoy-train, real-te
 with identical conditional mean) — the swap's miscalibration only shows up when
 the mean is held fixed.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,7 +19,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.stats import norm
 
-from ebpfn.config import DataConfig, Prior
+from ebpfn.config import DataConfig
+from ebpfn.config import Prior
 
 
 @dataclass(frozen=True)

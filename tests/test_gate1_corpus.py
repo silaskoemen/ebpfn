@@ -1,14 +1,15 @@
 """Corpus column-rotation logic, tested offline on a synthetic frame with a
 known structure so the learnability / redundancy / type filters are checkable
 without hitting OpenML. plans/gate1_revised.md §3.3."""
+
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import pytest
-
 from ebpfn.gate1.config import CorpusConfig
-from ebpfn.gate1.corpus import encode_frame, rotate_frame
+from ebpfn.gate1.corpus import encode_frame
+from ebpfn.gate1.corpus import rotate_frame
 
 
 def _frame(n=600, seed=0) -> pd.DataFrame:
@@ -19,8 +20,9 @@ def _frame(n=600, seed=0) -> pd.DataFrame:
     cat = rng.choice(["x", "y", "z"], size=n)  # categorical -> never a target
     few = rng.integers(0, 3, size=n).astype(float)  # < target_min_unique -> never a target
     const = np.ones(n)  # constant -> never a target
-    df = pd.DataFrame({"a": a, "b": b, "c": c, "target": target,
-                       "pure_noise": pure_noise, "cat": cat, "few": few, "const": const})
+    df = pd.DataFrame(
+        {"a": a, "b": b, "c": c, "target": target, "pure_noise": pure_noise, "cat": cat, "few": few, "const": const}
+    )
     df.loc[df.index[:10], "a"] = np.nan  # inject missingness to exercise imputation
     df["cat"] = df["cat"].astype("category")
     return df

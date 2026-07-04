@@ -1,8 +1,9 @@
 """The falsifiable heart of Construction A: the cross-slice swap keeps the
 marginal P(Y) (essentially) invariant while changing Y|X inside the bands."""
-import numpy as np
 
-from ebpfn.config import DataConfig, Prior
+import numpy as np
+from ebpfn.config import DataConfig
+from ebpfn.config import Prior
 from ebpfn.priors import sample_task
 
 

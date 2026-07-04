@@ -1,8 +1,10 @@
 """s-OTDD sanity: agrees roughly with exact OT, and self-distance ~ 0."""
-import numpy as np
 
-from ebpfn.config import DataConfig, Prior
-from ebpfn.distance import exact_otdd, s_otdd
+import numpy as np
+from ebpfn.config import DataConfig
+from ebpfn.config import Prior
+from ebpfn.distance import exact_otdd
+from ebpfn.distance import s_otdd
 from ebpfn.priors import sample_task
 
 

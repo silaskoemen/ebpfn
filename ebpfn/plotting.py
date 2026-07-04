@@ -5,6 +5,7 @@ variable, three stacked panels with seed CIs:
 2. conditional-coverage MMD (mean and max);
 3. calibration gap (NLL and CRPS), with the zero line marked.
 """
+
 from __future__ import annotations
 
 import matplotlib
@@ -52,11 +53,19 @@ def make_sweep_figure(frames: dict[str, pl.DataFrame], cfg: ExperimentConfig) ->
     # Panel 1: s-OTDD recall + null band.
     ax = axes[0]
     _line(ax, sotdd, "decoy_recall", "decoy recall", color="C3")
-    nb = sotdd.group_by("value").agg(
-        pl.col("null_lo").mean().alias("lo"), pl.col("null_hi").mean().alias("hi")
-    ).sort("value")
-    ax.fill_between(nb["value"].to_numpy(), nb["lo"].to_numpy(), nb["hi"].to_numpy(),
-                    color="C0", alpha=0.25, label="real-real' null band")
+    nb = (
+        sotdd.group_by("value")
+        .agg(pl.col("null_lo").mean().alias("lo"), pl.col("null_hi").mean().alias("hi"))
+        .sort("value")
+    )
+    ax.fill_between(
+        nb["value"].to_numpy(),
+        nb["lo"].to_numpy(),
+        nb["hi"].to_numpy(),
+        color="C0",
+        alpha=0.25,
+        label="real-real' null band",
+    )
     ax.set_ylabel("s-OTDD recall")
     ax.set_title(f"Construction {cfg.sweep.construction}: gate-0 sweep (lambda={lam}, K={k})")
     ax.legend(fontsize=8)

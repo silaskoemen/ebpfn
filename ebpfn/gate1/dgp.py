@@ -11,9 +11,11 @@ Every DGP returns the shared `Dataset`, so the Gate-0 distance / calibration cod
 is reused unchanged. All randomness flows through an explicit numpy Generator, so
 a (DGP, seed) pair fully determines the task (tested).
 """
+
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 from dataclasses import dataclass
 
 import numpy as np

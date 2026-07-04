@@ -5,6 +5,7 @@ Each real task is split train/test; the PFN takes the train split in context
 with Gate-0's `calibration_report` (NLL/CRPS/PIT/interval-coverage). The output
 table is joined against `coverage.py`'s table in the gate test.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -31,14 +32,19 @@ def task_calibration(
     reg.fit(task.X[tr], task.Y[tr])
     rep = calibration_report(reg, Dataset(X=task.X[te], Y=task.Y[te]), calib_cfg)
     return {
-        "nll": rep["nll"], "crps": rep["crps"], "pit_stat": rep["pit_stat"],
+        "nll": rep["nll"],
+        "crps": rep["crps"],
+        "pit_stat": rep["pit_stat"],
         **{f"cov@{p}": rep["coverage"][p] for p in rep["coverage"]},
     }
 
 
 def corpus_calibration(
-    reg: PFNRegressor, corpus: list[RealTask], cfg: DownstreamConfig,
-    calib_cfg: CalibConfig | None = None, rng: np.random.Generator | None = None,
+    reg: PFNRegressor,
+    corpus: list[RealTask],
+    cfg: DownstreamConfig,
+    calib_cfg: CalibConfig | None = None,
+    rng: np.random.Generator | None = None,
 ) -> list[dict]:
     """Per-task calibration row for the whole corpus (keyed for the join)."""
     calib_cfg = calib_cfg or CalibConfig()

@@ -5,6 +5,7 @@ bar-distribution NLL (not cross-entropy) and batches come from our live
 MixturePrior loader. Plain AdamW (no schedulefree dependency). The trained model
 is paired *by construction* with the prior it saw -- the exact pairing H1 needs.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,7 +14,8 @@ import numpy as np
 import torch
 
 from ebpfn.gate1.config import PFNConfig
-from ebpfn.gate1.pfn.bar import BarDistribution, normal_borders
+from ebpfn.gate1.pfn.bar import BarDistribution
+from ebpfn.gate1.pfn.bar import normal_borders
 from ebpfn.gate1.pfn.loader import PriorBatchLoader
 from ebpfn.gate1.pfn.model import PFNTransformer
 from ebpfn.gate1.pfn.regressor import PFNRegressor

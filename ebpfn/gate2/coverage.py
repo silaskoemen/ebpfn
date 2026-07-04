@@ -13,6 +13,7 @@ over the descriptor space and re-flatten the coverage null exactly as the joint
 s-OTDD distance did in Gate-1 -- so `variance_check` runs BEFORE any calibration
 number is touched.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,9 +22,10 @@ import numpy as np
 from sklearn.covariance import LedoitWolf
 
 from ebpfn.gate1.prior import MixturePrior
-from ebpfn.gate2.config import DescriptorConfig, Gate2Config, Gate2CoverageConfig
+from ebpfn.gate2.config import DescriptorConfig
+from ebpfn.gate2.config import Gate2Config
+from ebpfn.gate2.config import Gate2CoverageConfig
 from ebpfn.gate2.descriptor import conditional_descriptor
-from ebpfn.priors import Dataset
 
 
 @dataclass
@@ -43,8 +45,9 @@ class DescriptorCloud:
         return float(np.quantile(self.self_dists, q))
 
 
-def build_cloud(prior: MixturePrior, d: int, desc_cfg: DescriptorConfig,
-                cov_cfg: Gate2CoverageConfig, rng: np.random.Generator) -> DescriptorCloud:
+def build_cloud(
+    prior: MixturePrior, d: int, desc_cfg: DescriptorConfig, cov_cfg: Gate2CoverageConfig, rng: np.random.Generator
+) -> DescriptorCloud:
     """Sample a d-matched prior cloud and fit its descriptor mean/precision.
 
     The null band is measured on an independent prior probe cloud. Using the same
@@ -62,8 +65,9 @@ def build_cloud(prior: MixturePrior, d: int, desc_cfg: DescriptorConfig,
     return DescriptorCloud(d=d, mean=mean, precision=prec, self_dists=self_dists)
 
 
-def corpus_coverage(corpus, prior: MixturePrior, desc_cfg: DescriptorConfig,
-                    cov_cfg: Gate2CoverageConfig, rng: np.random.Generator) -> list[dict]:
+def corpus_coverage(
+    corpus, prior: MixturePrior, desc_cfg: DescriptorConfig, cov_cfg: Gate2CoverageConfig, rng: np.random.Generator
+) -> list[dict]:
     """Per-task descriptor coverage of the whole corpus (clouds cached per d)."""
     clouds: dict[int, DescriptorCloud] = {}
     rows = []
@@ -74,13 +78,18 @@ def corpus_coverage(corpus, prior: MixturePrior, desc_cfg: DescriptorConfig,
         desc = conditional_descriptor(t.data, desc_cfg, rng)
         dist = cloud.distance(desc)
         thr = cloud.null_quantile(cov_cfg.outside_quantile)
-        rows.append({
-            "source_did": t.source_did, "target": t.target, "n": t.n, "d": t.d,
-            "coverage": dist,  # Mahalanobis distance in descriptor space (higher = worse covered)
-            "null_thr": thr,
-            "null_median": float(np.median(cloud.self_dists)),
-            "outside": bool(dist > thr),
-        })
+        rows.append(
+            {
+                "source_did": t.source_did,
+                "target": t.target,
+                "n": t.n,
+                "d": t.d,
+                "coverage": dist,  # Mahalanobis distance in descriptor space (higher = worse covered)
+                "null_thr": thr,
+                "null_median": float(np.median(cloud.self_dists)),
+                "outside": bool(dist > thr),
+            }
+        )
     return rows
 
 

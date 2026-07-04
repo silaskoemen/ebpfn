@@ -9,10 +9,12 @@ plug into the same calibration path:
 - qgbm: lightgbm quantile grid -> a sorted quantile function. NLL via a Gaussian
   surrogate from the quantiles; CRPS from the pinball integral. Second opinion.
 """
+
 from __future__ import annotations
 
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 
 import numpy as np
 from catboost import CatBoostRegressor
@@ -90,7 +92,7 @@ class QuantilePredictive(Predictive):
 
 class ProbModel(ABC):
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "ProbModel": ...
+    def fit(self, X: np.ndarray, y: np.ndarray) -> ProbModel: ...
 
     @abstractmethod
     def predictive(self, X: np.ndarray) -> Predictive: ...
@@ -103,7 +105,7 @@ class GaussianCatBoost(ProbModel):
         self._cfg = config
         self.model: CatBoostRegressor | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "GaussianCatBoost":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> GaussianCatBoost:
         cfg = self._cfg
         self.model = CatBoostRegressor(
             loss_function="RMSEWithUncertainty",
@@ -130,7 +132,7 @@ class QuantileGBM(ProbModel):
         self._cfg = config
         self.models: list[LGBMRegressor] = []
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "QuantileGBM":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> QuantileGBM:
         cfg = self._cfg
         self.models = [
             LGBMRegressor(

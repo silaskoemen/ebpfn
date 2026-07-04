@@ -6,6 +6,7 @@ shape from the MixturePrior, so tensors are rectangular. The target is standardi
 per task by its train-portion mean/std (the bar-distribution borders live on the
 standardized scale); features are left raw (the model normalizes them internally).
 """
+
 from __future__ import annotations
 
 import numpy as np

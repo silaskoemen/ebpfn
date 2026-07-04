@@ -1,8 +1,10 @@
 """Explicit configuration for Gate-0 (spec §5: every knob in a Config; no magic
 numbers at call sites)."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 
 import numpy as np
 

@@ -4,6 +4,7 @@ Builds real/decoy/real' clouds, computes s-OTDD decoy recall vs the real-real'
 null band, the conditional-coverage MMD, and the calibration gap on a fresh real
 test task. Run: `pixi run python benchmarks/scripts/smoke.py`.
 """
+
 from __future__ import annotations
 
 import warnings
@@ -14,10 +15,20 @@ import numpy as np
 warnings.filterwarnings("ignore", message="X does not have valid feature names")
 
 from ebpfn.calibration import calibration_report
-from ebpfn.config import DataConfig, DistanceConfig, MMDConfig, ModelConfig, Prior
-from ebpfn.distance import cloud_recall, inside_band, make_sotdd_fn, null_band
-from ebpfn.mmd import CellPartition, aggregate, per_cell_mmd
-from ebpfn.priors import sample_cloud, sample_task
+from ebpfn.config import DataConfig
+from ebpfn.config import DistanceConfig
+from ebpfn.config import MMDConfig
+from ebpfn.config import ModelConfig
+from ebpfn.config import Prior
+from ebpfn.distance import cloud_recall
+from ebpfn.distance import inside_band
+from ebpfn.distance import make_sotdd_fn
+from ebpfn.distance import null_band
+from ebpfn.mmd import CellPartition
+from ebpfn.mmd import aggregate
+from ebpfn.mmd import per_cell_mmd
+from ebpfn.priors import sample_cloud
+from ebpfn.priors import sample_task
 from ebpfn.regressor import train_prob_regressor
 
 

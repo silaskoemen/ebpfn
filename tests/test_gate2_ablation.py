@@ -2,12 +2,18 @@
 coverage->calibration link and stay null when there is none, and the verdict
 must route correctly through the three pre-committed branches.
 """
+
 from __future__ import annotations
 
 import numpy as np
-
-from ebpfn.gate2 import Gate2Config, ablation_test, gate2_verdict
-from ebpfn.gate2.report import DEAD, INCONCLUSIVE, INCONCLUSIVE_POWER, LINK, NO_LINK
+from ebpfn.gate2 import Gate2Config
+from ebpfn.gate2 import ablation_test
+from ebpfn.gate2 import gate2_verdict
+from ebpfn.gate2.report import DEAD
+from ebpfn.gate2.report import INCONCLUSIVE
+from ebpfn.gate2.report import INCONCLUSIVE_POWER
+from ebpfn.gate2.report import LINK
+from ebpfn.gate2.report import NO_LINK
 
 
 def _rows(M, priors, rng, slope, noise):
@@ -19,8 +25,19 @@ def _rows(M, priors, rng, slope, noise):
         for p in priors:
             cov = rng.uniform(0.5, 4.0)  # within-task coverage variation across priors
             nll = base + slope * cov + noise * rng.standard_normal()
-            rows.append({"prior": p, "source_did": i, "target": "y", "n": 200, "d": 5,
-                         "coverage": cov, "nll": nll, "crps": nll, "pit_stat": 0.1})
+            rows.append(
+                {
+                    "prior": p,
+                    "source_did": i,
+                    "target": "y",
+                    "n": 200,
+                    "d": 5,
+                    "coverage": cov,
+                    "nll": nll,
+                    "crps": nll,
+                    "pit_stat": 0.1,
+                }
+            )
     return rows
 
 
@@ -54,29 +71,68 @@ def test_ablation_differences_out_task_difficulty():
         base = rng.normal(0, 50.0)  # enormous between-task difficulty
         for p in priors:
             cov = rng.uniform(0.5, 4.0)
-            rows.append({"prior": p, "source_did": i, "target": "y", "n": 200, "d": 5,
-                         "coverage": cov, "nll": base + rng.standard_normal(),
-                         "crps": 0.0, "pit_stat": 0.0})
+            rows.append(
+                {
+                    "prior": p,
+                    "source_did": i,
+                    "target": "y",
+                    "n": 200,
+                    "d": 5,
+                    "coverage": cov,
+                    "nll": base + rng.standard_normal(),
+                    "crps": 0.0,
+                    "pit_stat": 0.0,
+                }
+            )
     res = ablation_test(rows, priors, Gate2Config(n_boot=500))
     assert not res["passes"]
 
 
 def test_verdict_routing():
-    good_var = {"passes": True, "frac_outside": 0.3, "min_frac_outside": 0.15,
-                "median_ratio": 1.5, "min_median_ratio": 1.25}
+    good_var = {
+        "passes": True,
+        "frac_outside": 0.3,
+        "min_frac_outside": 0.15,
+        "median_ratio": 1.5,
+        "min_median_ratio": 1.25,
+    }
     bad_var = {**good_var, "passes": False}
 
     # a well-powered LINK: CI lower bound clears the bar
-    link = {"has_coverage_variation": True, "enough_tasks": True, "passes": True,
-            "ruled_out_effect": False, "coverage_spread": 1.0, "fe_corr": 0.4,
-            "ci_lo": 0.2, "ci_hi": 0.6, "ci_half_width": 0.2, "n_tasks": 60,
-            "min_ablation_tasks": 12, "effect_threshold": 0.15}
+    link = {
+        "has_coverage_variation": True,
+        "enough_tasks": True,
+        "passes": True,
+        "ruled_out_effect": False,
+        "coverage_spread": 1.0,
+        "fe_corr": 0.4,
+        "ci_lo": 0.2,
+        "ci_hi": 0.6,
+        "ci_half_width": 0.2,
+        "n_tasks": 60,
+        "min_ablation_tasks": 12,
+        "effect_threshold": 0.15,
+    }
     # a true NULL: whole CI sits below the bar (effect ruled out)
-    no_link = {**link, "passes": False, "ruled_out_effect": True, "fe_corr": 0.0,
-               "ci_lo": -0.08, "ci_hi": 0.08, "ci_half_width": 0.08}
+    no_link = {
+        **link,
+        "passes": False,
+        "ruled_out_effect": True,
+        "fe_corr": 0.0,
+        "ci_lo": -0.08,
+        "ci_hi": 0.08,
+        "ci_half_width": 0.08,
+    }
     # underpowered: CI straddles the bar -- neither link nor null
-    wide = {**link, "passes": False, "ruled_out_effect": False, "fe_corr": 0.05,
-            "ci_lo": -0.5, "ci_hi": 0.7, "ci_half_width": 0.6}
+    wide = {
+        **link,
+        "passes": False,
+        "ruled_out_effect": False,
+        "fe_corr": 0.05,
+        "ci_lo": -0.5,
+        "ci_hi": 0.7,
+        "ci_half_width": 0.6,
+    }
     # too few tasks: refuse a decisive call
     few = {**link, "passes": False, "ruled_out_effect": False, "enough_tasks": False, "n_tasks": 7}
     flat = {**link, "has_coverage_variation": False, "passes": False, "coverage_spread": 1e-9}

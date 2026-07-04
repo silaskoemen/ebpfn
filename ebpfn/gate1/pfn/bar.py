@@ -10,6 +10,7 @@ All math is in torch so the NLL is differentiable through the logits for trainin
 the same object serves inference (cdf for PIT, icdf for quantiles). Borders are on
 the standardized-y scale (the regressor de-standardizes around it).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -45,7 +46,7 @@ class BarDistribution:
         self.s_right = float(self.widths[-1])
         self._inner_edges = borders[1:-1]  # borders[1..K-1], length K-1
 
-    def to(self, device) -> "BarDistribution":
+    def to(self, device) -> BarDistribution:
         b = self.borders.to(device)
         return BarDistribution(b)
 

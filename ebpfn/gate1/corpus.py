@@ -13,6 +13,7 @@ offline; `load_corpus` is the thin OpenML fetch on top. Categorical features are
 ordinal-encoded (label-free, keeps d small); missing values are median/mode
 imputed; rows missing the *target* are dropped (never imputed into Y).
 """
+
 from __future__ import annotations
 
 import os
@@ -84,9 +85,7 @@ def _learnability_r2(X: np.ndarray, y: np.ndarray, cfg: CorpusConfig, rng: np.ra
     return float(r2_score(y[te], model.predict(X[te])))
 
 
-def rotate_frame(
-    df: pd.DataFrame, did: int, name: str, cfg: CorpusConfig, rng: np.random.Generator
-) -> list[RealTask]:
+def rotate_frame(df: pd.DataFrame, did: int, name: str, cfg: CorpusConfig, rng: np.random.Generator) -> list[RealTask]:
     """Column-rotate one table into filtered, (n,d)-clamped RealTasks."""
     M, names, is_cat, n_unique = encode_frame(df)
     p = M.shape[1]
@@ -118,13 +117,18 @@ def rotate_frame(
         r2 = _learnability_r2(X, Y, cfg, rng)
         if r2 < cfg.learnability_min or r2 > cfg.redundancy_max:
             continue
-        tasks.append(RealTask(
-            data=Dataset(X=X, Y=Y),
-            source_did=did, source_name=name, target=names[c],
-            n=int(X.shape[0]), d=int(d),
-            n_cat_features=int(sum(is_cat[j] for j in feat_cols)),
-            learnability_r2=r2,
-        ))
+        tasks.append(
+            RealTask(
+                data=Dataset(X=X, Y=Y),
+                source_did=did,
+                source_name=name,
+                target=names[c],
+                n=int(X.shape[0]),
+                d=int(d),
+                n_cat_features=int(sum(is_cat[j] for j in feat_cols)),
+                learnability_r2=r2,
+            )
+        )
     tasks.sort(key=lambda t: t.learnability_r2, reverse=True)
     return tasks[: cfg.max_tasks_per_dataset]
 
@@ -148,8 +152,9 @@ def load_corpus(
     corpus: list[RealTask] = []
     for i, did in enumerate(dids):
         try:
-            ds = openml.datasets.get_dataset(did, download_data=True, download_qualities=False,
-                                             download_features_meta_data=False)
+            ds = openml.datasets.get_dataset(
+                did, download_data=True, download_qualities=False, download_features_meta_data=False
+            )
             df, _, _, _ = ds.get_data()
             tasks = rotate_frame(df, did, ds.name, cfg, rng)
         except Exception as e:  # a single bad dataset must not abort the corpus
@@ -157,6 +162,8 @@ def load_corpus(
             continue
         corpus.extend(tasks)
         if verbose:
-            print(f"[corpus] {i + 1}/{len(dids)} did={did} {ds.name[:30]:30s} +{len(tasks)} tasks "
-                  f"(total {len(corpus)})")
+            print(
+                f"[corpus] {i + 1}/{len(dids)} did={did} {ds.name[:30]:30s} +{len(tasks)} tasks "
+                f"(total {len(corpus)})"
+            )
     return corpus

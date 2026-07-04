@@ -9,6 +9,7 @@ The PFN works on standardized y (matching the bar borders); the Predictive
 de-standardizes so all scores are on the task's original y scale (NLL picks up
 the +log(std) Jacobian; PIT is transform-invariant).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -16,8 +17,8 @@ import torch
 
 from ebpfn.gate1.pfn.bar import BarDistribution
 from ebpfn.gate1.pfn.model import PFNTransformer
-from ebpfn.priors import Dataset
-from ebpfn.regressor import Predictive, ProbModel
+from ebpfn.regressor import Predictive
+from ebpfn.regressor import ProbModel
 
 _CRPS_LEVELS = np.linspace(0.02, 0.98, 49)
 
@@ -65,7 +66,7 @@ class PFNRegressor(ProbModel):
         self._mean = 0.0
         self._std = 1.0
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "PFNRegressor":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> PFNRegressor:
         self._Xtr = np.asarray(X, dtype=np.float32)
         self._mean = float(y.mean())
         self._std = float(y.std()) + self.eps

@@ -1,20 +1,18 @@
 """Coverage statistics: k-NN-mean recall mechanics, the X-only diagnostic, the
 self-recall null band, and the semantic check that an off-distribution task
 scores *higher* coverage distance than a prior-typical one. §3.4."""
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
-
-from ebpfn.gate1 import (
-    CoverageConfig,
-    PriorConfig,
-    build_prior,
-    knn_mean_recall,
-    prior_self_null,
-    task_coverage,
-    x_only_sliced,
-)
+from ebpfn.gate1 import CoverageConfig
+from ebpfn.gate1 import PriorConfig
+from ebpfn.gate1 import build_prior
+from ebpfn.gate1 import knn_mean_recall
+from ebpfn.gate1 import prior_self_null
+from ebpfn.gate1 import task_coverage
+from ebpfn.gate1 import x_only_sliced
 from ebpfn.priors import Dataset
 
 

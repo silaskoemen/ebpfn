@@ -38,12 +38,16 @@ or higher shape modes of Y, not just hand-picked scalar bin statistics.
 The vector is deterministic given (task, config.seed). DESCRIPTOR_NAMES freezes
 the layout; nothing below may be tuned against calibration.
 """
+
 from __future__ import annotations
 
 from math import factorial
 
 import numpy as np
-from scipy.stats import kurtosis, norm, rankdata, skew
+from scipy.stats import kurtosis
+from scipy.stats import norm
+from scipy.stats import rankdata
+from scipy.stats import skew
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
@@ -184,8 +188,7 @@ def _rff_features(Xz: np.ndarray, n_features: int, bandwidth: float, rng: np.ran
     return np.sqrt(2.0 / n_features) * np.cos(Xz @ W + b)
 
 
-def _operator_x_blocks(Xz: np.ndarray, cfg: DescriptorConfig,
-                       rng: np.random.Generator) -> dict[str, np.ndarray]:
+def _operator_x_blocks(Xz: np.ndarray, cfg: DescriptorConfig, rng: np.random.Generator) -> dict[str, np.ndarray]:
     """Feature blocks for the finite-feature conditional-operator estimate."""
     U = rng.standard_normal((Xz.shape[1], cfg.n_poly))
     U /= np.linalg.norm(U, axis=0, keepdims=True) + 1e-12
@@ -206,8 +209,7 @@ def _inv_sqrt_spd(C: np.ndarray) -> np.ndarray:
     return (vecs / np.sqrt(vals)) @ vecs.T
 
 
-def _operator_spectrum_features(Xfeat: np.ndarray, Yfeat: np.ndarray,
-                                cfg: DescriptorConfig) -> list[float]:
+def _operator_spectrum_features(Xfeat: np.ndarray, Yfeat: np.ndarray, cfg: DescriptorConfig) -> list[float]:
     """Regularized CCA modes plus CKA summaries for one X feature block."""
     Xc = _standardize_cols(Xfeat)
     Yc = _standardize_cols(Yfeat)
@@ -221,9 +223,9 @@ def _operator_spectrum_features(Xfeat: np.ndarray, Yfeat: np.ndarray,
     whitened = _inv_sqrt_spd(Cxx) @ Cxy @ _inv_sqrt_spd(Cyy)
     modes = np.clip(np.linalg.svd(whitened, compute_uv=False), 0.0, 1.0)
     padded = np.zeros(cfg.cca_modes)
-    padded[:min(cfg.cca_modes, modes.size)] = modes[:cfg.cca_modes]
+    padded[: min(cfg.cca_modes, modes.size)] = modes[: cfg.cca_modes]
 
-    energy = float(np.sum(modes ** 2))
+    energy = float(np.sum(modes**2))
     stable_rank = 0.0 if modes.size == 0 or modes[0] <= 1e-12 else float(energy / (modes[0] ** 2))
     x_norm = float(np.sum(Cxx0 * Cxx0))
     y_norm = float(np.sum(Cyy0 * Cyy0))
@@ -289,7 +291,7 @@ def _effective_dimension(Xz: np.ndarray, yz: np.ndarray, n_bins: int) -> float:
     ~d if many share it. Captures effective dimensionality (additively); the
     interaction term below captures what additivity misses."""
     r = np.array([_r2(yz, _binned_mean(Xz[:, j], yz, n_bins)) for j in range(Xz.shape[1])])
-    s1, s2 = r.sum(), float(np.sum(r ** 2))
+    s1, s2 = r.sum(), float(np.sum(r**2))
     if s2 <= 1e-12:
         return 1.0
     return float(s1 * s1 / s2)
@@ -309,6 +311,7 @@ def _interaction_gain(Xz: np.ndarray, yz: np.ndarray, cfg: DescriptorConfig, rng
     val, tr = perm[:n_val], perm[n_val:]
     if tr.size < 8:
         return 0.0
+
     # additive transform: replace each feature by its train-fit binned conditional mean
     def _transform(idx: np.ndarray) -> np.ndarray:
         cols = []
@@ -318,8 +321,9 @@ def _interaction_gain(Xz: np.ndarray, yz: np.ndarray, cfg: DescriptorConfig, rng
                 cols.append(np.full(idx.size, yz[tr].mean()))
                 continue
             bt = np.clip(np.digitize(Xz[tr, j], edges[1:-1]), 0, edges.size - 2)
-            means = np.array([yz[tr][bt == b].mean() if (bt == b).any() else yz[tr].mean()
-                              for b in range(edges.size - 1)])
+            means = np.array(
+                [yz[tr][bt == b].mean() if (bt == b).any() else yz[tr].mean() for b in range(edges.size - 1)]
+            )
             bi = np.clip(np.digitize(Xz[idx, j], edges[1:-1]), 0, edges.size - 2)
             cols.append(means[bi])
         return np.column_stack(cols)
@@ -332,8 +336,7 @@ def _interaction_gain(Xz: np.ndarray, yz: np.ndarray, cfg: DescriptorConfig, rng
     return max(0.0, float(r2_gbm) - max(0.0, float(r2_add)))
 
 
-def _descriptor_once(X: np.ndarray, y: np.ndarray, cfg: DescriptorConfig,
-                     rng: np.random.Generator) -> np.ndarray:
+def _descriptor_once(X: np.ndarray, y: np.ndarray, cfg: DescriptorConfig, rng: np.random.Generator) -> np.ndarray:
     """The descriptor on one (already row-matched) sample. X z-scored per feature,
     Y rank-Gaussian transformed; both make the vector affine/monotone-invariant."""
     Xz, yz = _zscore(X), _rank_gaussian(y)
@@ -359,8 +362,9 @@ def _descriptor_once(X: np.ndarray, y: np.ndarray, cfg: DescriptorConfig,
     return np.array(vec, dtype=float)
 
 
-def conditional_descriptor(task: Dataset, cfg: DescriptorConfig | None = None,
-                           rng: np.random.Generator | None = None) -> np.ndarray:
+def conditional_descriptor(
+    task: Dataset, cfg: DescriptorConfig | None = None, rng: np.random.Generator | None = None
+) -> np.ndarray:
     """The frozen conditional-structure descriptor of one task, measured at a
     matched row budget `n0` for cross-task comparability.
 

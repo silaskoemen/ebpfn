@@ -3,38 +3,41 @@
 Library surface matching the spec §6 signatures. The experiment harness lives
 under benchmarks/.
 """
+
 from ebpfn.calibration import calibration_report
-from ebpfn.config import (
-    CalibConfig,
-    DataConfig,
-    DistanceConfig,
-    ExperimentConfig,
-    MMDConfig,
-    ModelConfig,
-    Prior,
-    SweepConfig,
-)
-from ebpfn.experiment import run_null, run_sweep, suggest_thresholds, summarize
+from ebpfn.config import CalibConfig
+from ebpfn.config import DataConfig
+from ebpfn.config import DistanceConfig
+from ebpfn.config import ExperimentConfig
+from ebpfn.config import MMDConfig
+from ebpfn.config import ModelConfig
+from ebpfn.config import Prior
+from ebpfn.config import SweepConfig
+from ebpfn.distance import cloud_recall
+from ebpfn.distance import exact_otdd
+from ebpfn.distance import inside_band
+from ebpfn.distance import make_sotdd_fn
+from ebpfn.distance import null_band
+from ebpfn.distance import recall_to_cloud
+from ebpfn.distance import s_otdd
+from ebpfn.distance import standardize_per_task
+from ebpfn.experiment import run_null
+from ebpfn.experiment import run_sweep
+from ebpfn.experiment import suggest_thresholds
+from ebpfn.experiment import summarize
+from ebpfn.mmd import CellPartition
+from ebpfn.mmd import aggregate
+from ebpfn.mmd import per_cell_mmd
 from ebpfn.plotting import make_sweep_figure
+from ebpfn.priors import Dataset
+from ebpfn.priors import f_mean
+from ebpfn.priors import sample_cloud
+from ebpfn.priors import sample_task
+from ebpfn.regressor import GaussianCatBoost
+from ebpfn.regressor import ProbModel
+from ebpfn.regressor import QuantileGBM
+from ebpfn.regressor import train_prob_regressor
 from ebpfn.results import save_run
-from ebpfn.distance import (
-    cloud_recall,
-    exact_otdd,
-    inside_band,
-    make_sotdd_fn,
-    null_band,
-    recall_to_cloud,
-    s_otdd,
-    standardize_per_task,
-)
-from ebpfn.mmd import CellPartition, aggregate, per_cell_mmd
-from ebpfn.priors import Dataset, f_mean, sample_cloud, sample_task
-from ebpfn.regressor import (
-    GaussianCatBoost,
-    ProbModel,
-    QuantileGBM,
-    train_prob_regressor,
-)
 
 __all__ = [
     "CalibConfig",

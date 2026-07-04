@@ -1,20 +1,30 @@
 """Harness smoke: run_sweep / run_null produce the expected tidy schema, the
 lambda and K sub-sweeps are present, and threshold suggestion is well-formed.
 Tiny config -- correctness of the schema, not the science."""
-import dataclasses
 
 import pytest
-
-from ebpfn.config import DistanceConfig, ExperimentConfig, MMDConfig, ModelConfig, SweepConfig
-from ebpfn.experiment import run_null, run_sweep, suggest_thresholds, summarize
+from ebpfn.config import DistanceConfig
+from ebpfn.config import ExperimentConfig
+from ebpfn.config import MMDConfig
+from ebpfn.config import ModelConfig
+from ebpfn.config import SweepConfig
+from ebpfn.experiment import run_null
+from ebpfn.experiment import run_sweep
+from ebpfn.experiment import suggest_thresholds
+from ebpfn.experiment import summarize
 
 
 def _tiny_cfg(construction="A"):
     return ExperimentConfig(
         sweep=SweepConfig(
-            construction=construction, values=(0.25, 1.0), n_seeds=2,
-            n_tasks_per_prior=4, cloud_n_rows=300,
-            n_calib_tasks=1, calib_n_train=800, calib_n_test=800,
+            construction=construction,
+            values=(0.25, 1.0),
+            n_seeds=2,
+            n_tasks_per_prior=4,
+            cloud_n_rows=300,
+            n_calib_tasks=1,
+            calib_n_train=800,
+            calib_n_test=800,
         ),
         distance=DistanceConfig(n_proj=40),
         mmd=MMDConfig(n_cells=8, n_cells_grid=(4, 8)),

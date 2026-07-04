@@ -8,9 +8,10 @@ that differences out task-intrinsic difficulty. Everything here is frozen before
 any calibration number is looked at (pre-registration discipline, §4 of the
 Gate-1 plan carried forward).
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ebpfn.gate1.config import PriorConfig
 
@@ -167,25 +168,40 @@ def prior_ladder() -> dict[str, PriorConfig]:
     """
     return {
         "linear_narrow": PriorConfig(  # pure linear, low noise -- under-covers real structure
-            scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0,
+            scm_linear_weight=1.0,
+            scm_mlp_weight=0.0,
+            bnn_weight=0.0,
             scm_noise_scale=0.15,
         ),
         "linear": PriorConfig(  # pure linear, default noise
-            scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0,
+            scm_linear_weight=1.0,
+            scm_mlp_weight=0.0,
+            bnn_weight=0.0,
             scm_noise_scale=0.3,
         ),
         "mild_nonlinear": PriorConfig(  # mostly linear with a touch of smooth nonlinearity
-            scm_linear_weight=1.0, scm_mlp_weight=0.5, bnn_weight=0.25,
+            scm_linear_weight=1.0,
+            scm_mlp_weight=0.5,
+            bnn_weight=0.25,
             scm_mlp_activation="tanh",
         ),
         "balanced": PriorConfig(),  # the Gate-1 default mixture (linear + MLP + BNN)
         "nonlinear": PriorConfig(  # no linear member; fully nonlinear, deeper SCM
-            scm_linear_weight=0.0, scm_mlp_weight=1.0, bnn_weight=1.0,
-            scm_mlp_activation="tanh", scm_n_hidden=6,
+            scm_linear_weight=0.0,
+            scm_mlp_weight=1.0,
+            bnn_weight=1.0,
+            scm_mlp_activation="tanh",
+            scm_n_hidden=6,
         ),
         "rich_nonlinear": PriorConfig(  # deep relu-MLP + larger BNN + higher noise
-            scm_linear_weight=0.0, scm_mlp_weight=1.0, bnn_weight=1.5,
-            scm_mlp_activation="relu", scm_n_hidden=6, scm_noise_scale=0.5,
-            bnn_n_layers=3, bnn_hidden=24, bnn_noise_scale=0.5,
+            scm_linear_weight=0.0,
+            scm_mlp_weight=1.0,
+            bnn_weight=1.5,
+            scm_mlp_activation="relu",
+            scm_n_hidden=6,
+            scm_noise_scale=0.5,
+            bnn_n_layers=3,
+            bnn_hidden=24,
+            bnn_noise_scale=0.5,
         ),
     }

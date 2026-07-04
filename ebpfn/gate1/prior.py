@@ -6,6 +6,7 @@ the PFN's training batches and the s-OTDD coverage clouds -- the exact prior<->
 model pairing H1 requires (§2). The caller supplies (n, d) per task, so coverage
 clouds can be d-matched to each real task.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,7 +14,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from ebpfn.gate1.config import PriorConfig
-from ebpfn.gate1.dgp import DGP, BnnDgp, ScmDgp
+from ebpfn.gate1.dgp import DGP
+from ebpfn.gate1.dgp import BnnDgp
+from ebpfn.gate1.dgp import ScmDgp
 from ebpfn.priors import Dataset
 
 
@@ -53,40 +56,46 @@ def build_prior(cfg: PriorConfig) -> MixturePrior:
     """Assemble the mixture from a PriorConfig (members with weight 0 dropped)."""
     members: list[tuple[DGP, float]] = []
     if cfg.scm_linear_weight > 0:
-        members.append((
-            ScmDgp(
-                activation="linear",
-                n_hidden=cfg.scm_n_hidden,
-                edge_prob=cfg.scm_edge_prob,
-                max_parents=cfg.scm_max_parents,
-                weight_scale=cfg.scm_weight_scale,
-                noise_scale=cfg.scm_noise_scale,
-            ),
-            cfg.scm_linear_weight,
-        ))
+        members.append(
+            (
+                ScmDgp(
+                    activation="linear",
+                    n_hidden=cfg.scm_n_hidden,
+                    edge_prob=cfg.scm_edge_prob,
+                    max_parents=cfg.scm_max_parents,
+                    weight_scale=cfg.scm_weight_scale,
+                    noise_scale=cfg.scm_noise_scale,
+                ),
+                cfg.scm_linear_weight,
+            )
+        )
     if cfg.scm_mlp_weight > 0:
-        members.append((
-            ScmDgp(
-                activation=cfg.scm_mlp_activation,
-                n_hidden=cfg.scm_n_hidden,
-                edge_prob=cfg.scm_edge_prob,
-                max_parents=cfg.scm_max_parents,
-                weight_scale=cfg.scm_weight_scale,
-                noise_scale=cfg.scm_noise_scale,
-            ),
-            cfg.scm_mlp_weight,
-        ))
+        members.append(
+            (
+                ScmDgp(
+                    activation=cfg.scm_mlp_activation,
+                    n_hidden=cfg.scm_n_hidden,
+                    edge_prob=cfg.scm_edge_prob,
+                    max_parents=cfg.scm_max_parents,
+                    weight_scale=cfg.scm_weight_scale,
+                    noise_scale=cfg.scm_noise_scale,
+                ),
+                cfg.scm_mlp_weight,
+            )
+        )
     if cfg.bnn_weight > 0:
-        members.append((
-            BnnDgp(
-                n_layers=cfg.bnn_n_layers,
-                hidden=cfg.bnn_hidden,
-                activation=cfg.bnn_activation,
-                weight_scale=cfg.bnn_weight_scale,
-                noise_scale=cfg.bnn_noise_scale,
-            ),
-            cfg.bnn_weight,
-        ))
+        members.append(
+            (
+                BnnDgp(
+                    n_layers=cfg.bnn_n_layers,
+                    hidden=cfg.bnn_hidden,
+                    activation=cfg.bnn_activation,
+                    weight_scale=cfg.bnn_weight_scale,
+                    noise_scale=cfg.bnn_noise_scale,
+                ),
+                cfg.bnn_weight,
+            )
+        )
     dgps = tuple(m[0] for m in members)
     weights = tuple(m[1] for m in members)
     return MixturePrior(dgps=dgps, weights=weights)

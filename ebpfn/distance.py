@@ -5,9 +5,10 @@ cost d((x,y),(x',y'))^p = ||x-x'||^p + lambda*|y-y'|^p. With p=2 that is squared
 Euclidean distance on the augmented vector z = [x, sqrt(lambda)*y], so sliced-
 Wasserstein on z gives the headline s-OTDD; exact OT (POT emd2) is the d=2 check.
 """
+
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import ot

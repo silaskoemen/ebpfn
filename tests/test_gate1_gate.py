@@ -3,14 +3,15 @@ when calibration is driven entirely by n,d and coverage only correlates with
 calibration *through* n,d, the n,d-partial correlation must null out (CI includes
 0) even though the raw correlation is spuriously non-zero. And a genuine
 coverage->calibration signal must still be detected. §4."""
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from scipy.stats import spearmanr
-
 from ebpfn.gate1.config import GateConfig
-from ebpfn.gate1.gate import gate1_test, partial_spearman
+from ebpfn.gate1.gate import gate1_test
+from ebpfn.gate1.gate import partial_spearman
+from scipy.stats import spearmanr
 
 
 def _rows(n, d, coverage, x_only, calib):
@@ -18,8 +19,9 @@ def _rows(n, d, coverage, x_only, calib):
     cov_rows, cal_rows = [], []
     for i in range(len(n)):
         key = {"source_did": i, "target": "t"}
-        cov_rows.append({**key, "coverage": float(coverage[i]), "x_only_coverage": float(x_only[i]),
-                         "n": int(n[i]), "d": int(d[i])})
+        cov_rows.append(
+            {**key, "coverage": float(coverage[i]), "x_only_coverage": float(x_only[i]), "n": int(n[i]), "d": int(d[i])}
+        )
         cal_rows.append({**key, "n": int(n[i]), "d": int(d[i]), "nll": float(calib[i])})
     return cov_rows, cal_rows
 
@@ -94,7 +96,6 @@ def test_joint_over_xonly_credits_conditional_signal():
 
 
 def test_requires_minimum_tasks():
-    cov_rows, cal_rows = _rows(np.arange(3) + 100, np.arange(3) + 2,
-                               np.zeros(3), np.zeros(3), np.zeros(3))
+    cov_rows, cal_rows = _rows(np.arange(3) + 100, np.arange(3) + 2, np.zeros(3), np.zeros(3), np.zeros(3))
     with pytest.raises(ValueError):
         gate1_test(cov_rows, cal_rows)

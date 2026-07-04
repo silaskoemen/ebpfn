@@ -1,14 +1,18 @@
 """Gate-1 prior substrate: shapes, determinism, finiteness, and -- the one that
 matters -- that each DGP produces a target that is actually learnable from X
 (not pure noise). plans/gate1_revised.md §3.1/§6."""
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
+from ebpfn.gate1 import BnnDgp
+from ebpfn.gate1 import MixturePrior
+from ebpfn.gate1 import PriorConfig
+from ebpfn.gate1 import ScmDgp
+from ebpfn.gate1 import build_prior
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import r2_score
-
-from ebpfn.gate1 import BnnDgp, MixturePrior, PriorConfig, ScmDgp, build_prior
 
 ALL_DGPS = [
     ScmDgp(activation="linear"),

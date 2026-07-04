@@ -11,12 +11,14 @@ Reuses Gate-0 `ebpfn/distance.py` (s_otdd, standardization). Task and cloud are
 subsampled to a common row count so the sliced distance compares equal-size
 clouds; the task's true n is recorded elsewhere as the n confound covariate.
 """
+
 from __future__ import annotations
 
 import numpy as np
 from ot.sliced import sliced_wasserstein_distance
 
-from ebpfn.distance import DistFn, s_otdd
+from ebpfn.distance import DistFn
+from ebpfn.distance import s_otdd
 from ebpfn.gate1.config import CoverageConfig
 from ebpfn.gate1.corpus import RealTask
 from ebpfn.gate1.prior import MixturePrior
@@ -82,19 +84,28 @@ def prior_self_null(prior: MixturePrior, d: int, cfg: CoverageConfig, rng: np.ra
     return {"d": d, "mean": float(recalls.mean()), "band_lo": float(lo), "band_hi": float(hi)}
 
 
-def corpus_coverage(corpus: list[RealTask], prior: MixturePrior, cfg: CoverageConfig, rng: np.random.Generator) -> list[dict]:
+def corpus_coverage(
+    corpus: list[RealTask], prior: MixturePrior, cfg: CoverageConfig, rng: np.random.Generator
+) -> list[dict]:
     """Per-task coverage row for the whole corpus (joint + X-only + schema)."""
     rows = []
     for t in corpus:
         cov = task_coverage(t.data, prior, t.d, cfg, rng)
-        rows.append({
-            "source_did": t.source_did, "target": t.target,
-            "n": t.n, "d": t.d, "learnability_r2": t.learnability_r2,
-            **cov,
-        })
+        rows.append(
+            {
+                "source_did": t.source_did,
+                "target": t.target,
+                "n": t.n,
+                "d": t.d,
+                "learnability_r2": t.learnability_r2,
+                **cov,
+            }
+        )
     return rows
 
 
-def corpus_null(corpus: list[RealTask], prior: MixturePrior, cfg: CoverageConfig, rng: np.random.Generator) -> dict[int, dict]:
+def corpus_null(
+    corpus: list[RealTask], prior: MixturePrior, cfg: CoverageConfig, rng: np.random.Generator
+) -> dict[int, dict]:
     """Prior self-recall null band per unique d present in the corpus."""
     return {d: prior_self_null(prior, d, cfg, rng) for d in sorted({t.d for t in corpus})}

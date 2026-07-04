@@ -5,6 +5,7 @@ then per cell compute MMD^2 between the 1-D Y | cell of real vs decoy with a
 characteristic RBF kernel (median-heuristic bandwidth). Aggregate two ways:
 mass-weighted mean and max over cells.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,7 +23,7 @@ class CellPartition:
         self._seed = int(rng.integers(0, 2**31 - 1)) if rng is not None else 0
         self._km: KMeans | None = None
 
-    def fit(self, X: np.ndarray) -> "CellPartition":
+    def fit(self, X: np.ndarray) -> CellPartition:
         if self.method != "kmeans":
             raise NotImplementedError(f"partition method {self.method!r} not implemented")
         self._km = KMeans(n_clusters=self.n_cells, n_init=10, random_state=self._seed).fit(X)

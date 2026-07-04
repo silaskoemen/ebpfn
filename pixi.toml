@@ -7,13 +7,13 @@ channels = ["conda-forge"]
 platforms = ["osx-arm64"]
 
 [tasks]
+setup = "pre-commit install && pip install -e ."
 test = "pytest -q"
 smoke = "python benchmarks/scripts/smoke.py"
 sweep = "python benchmarks/scripts/run_sweep.py"
 gate1 = "python benchmarks/scripts/run_gate1.py"
 gate2 = "python benchmarks/scripts/run_gate2.py"
 gate2-quick = "python benchmarks/scripts/run_gate2.py --quick"
-lint = "ruff check ebpfn tests benchmarks"
 format = "ruff format ebpfn tests benchmarks"
 clean = "rm -rf build dist *.egg-info .pytest_cache .ruff_cache catboost_info"
 
@@ -36,6 +36,10 @@ pytest = ">=9.1.0,<10"
 ruff = "*"
 black = "*"
 pre-commit = "*"
+ty = ">=0.0.47"
+
+[feature.lint.tasks]
+lint = "pre-commit run -a"
 
 [feature.dev.dependencies]
 ipykernel = "*"

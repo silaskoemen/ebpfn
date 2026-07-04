@@ -15,6 +15,7 @@ a confound that is non-linear or interaction-driven in n,d would survive a
 linear-in-ranks control and manufacture a false pass (§4) -- the planted-confound
 test guards exactly this.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -72,13 +73,19 @@ def _join(coverage_rows: list[dict], calib_rows: list[dict]) -> dict[str, np.nda
         key = (r["source_did"], r["target"])
         if key not in cal_by_key:
             continue
-        cov.append(r["coverage"]); xcov.append(r["x_only_coverage"])
-        n.append(r["n"]); d.append(r["d"]); keys.append(key)
+        cov.append(r["coverage"])
+        xcov.append(r["x_only_coverage"])
+        n.append(r["n"])
+        d.append(r["d"])
+        keys.append(key)
     cal = cal_by_key
     return {
-        "coverage": np.array(cov), "x_only_coverage": np.array(xcov),
-        "n": np.array(n, dtype=float), "d": np.array(d, dtype=float),
-        "keys": keys, "_cal": cal,
+        "coverage": np.array(cov),
+        "x_only_coverage": np.array(xcov),
+        "n": np.array(n, dtype=float),
+        "d": np.array(d, dtype=float),
+        "keys": keys,
+        "_cal": cal,
     }
 
 

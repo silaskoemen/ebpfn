@@ -1,11 +1,13 @@
 """Both probabilistic heads should show a positive NLL calibration gap: a model
 trained on the decoy prior is worse-calibrated on real test data than one trained
 on the real prior, even though the conditional means match by construction."""
+
 import numpy as np
 import pytest
-
 from ebpfn.calibration import calibration_report
-from ebpfn.config import DataConfig, ModelConfig, Prior
+from ebpfn.config import DataConfig
+from ebpfn.config import ModelConfig
+from ebpfn.config import Prior
 from ebpfn.priors import sample_task
 from ebpfn.regressor import train_prob_regressor
 

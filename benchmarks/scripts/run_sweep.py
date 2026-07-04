@@ -9,18 +9,21 @@ config + git SHA to benchmarks/results/<run>/, and emits the 3-panel figure.
 `--quick` is a fast pilot (few seeds/tasks) to validate the pipeline -- NOT a
 pre-registered run. Fix the grid and thresholds before the real run (spec §5).
 """
+
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 from pathlib import Path
 
 import polars as pl
-
-import json
-
-from ebpfn.config import DistanceConfig, ExperimentConfig, MMDConfig, SweepConfig
-from ebpfn.experiment import run_null, run_sweep, suggest_thresholds, summarize
+from ebpfn.config import ExperimentConfig
+from ebpfn.config import SweepConfig
+from ebpfn.experiment import run_null
+from ebpfn.experiment import run_sweep
+from ebpfn.experiment import suggest_thresholds
+from ebpfn.experiment import summarize
 from ebpfn.plotting import make_sweep_figure
 from ebpfn.results import save_run
 
@@ -49,8 +52,12 @@ def quick_config(args: argparse.Namespace) -> ExperimentConfig:
     sweep = dataclasses.replace(
         cfg.sweep,
         values=(0.1, 0.5, 2.0) if not args.values else cfg.sweep.values,
-        n_seeds=3, n_tasks_per_prior=12, cloud_n_rows=400,
-        n_calib_tasks=1, calib_n_train=1500, calib_n_test=1500,
+        n_seeds=3,
+        n_tasks_per_prior=12,
+        cloud_n_rows=400,
+        n_calib_tasks=1,
+        calib_n_train=1500,
+        calib_n_test=1500,
     )
     distance = dataclasses.replace(cfg.distance, n_proj=100)
     mmd = dataclasses.replace(cfg.mmd, n_cells_grid=(8, 16))
@@ -76,9 +83,11 @@ def main() -> None:
     tag = args.name or f"{cfg.sweep.construction}{suffix}"
     out_dir = RESULTS_ROOT / tag
 
-    print(f"[run] construction={cfg.sweep.construction} seeds={cfg.sweep.n_seeds} "
-          f"tasks/prior={cfg.sweep.n_tasks_per_prior} values={cfg.sweep.values} "
-          f"mode={'null' if args.null else 'sweep'}")
+    print(
+        f"[run] construction={cfg.sweep.construction} seeds={cfg.sweep.n_seeds} "
+        f"tasks/prior={cfg.sweep.n_tasks_per_prior} values={cfg.sweep.values} "
+        f"mode={'null' if args.null else 'sweep'}"
+    )
 
     if args.null:
         frames = run_null(cfg)

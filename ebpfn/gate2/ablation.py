@@ -17,6 +17,7 @@ A secondary cross-sectional test (per-prior partial Spearman of coverage vs
 calibration, controlling n and d) is reported for direct comparison with the
 Gate-1 number (0.083) -- but it is explicitly NOT the headline.
 """
+
 from __future__ import annotations
 
 import numpy as np

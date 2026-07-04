@@ -7,24 +7,22 @@ coverage quantity must put a structurally-foreign task further from the prior
 cloud than a prior-typical one, and `variance_check` must FAIL on in-distribution
 tasks and PASS on out-of-distribution ones.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import numpy as np
-import pytest
-
-from ebpfn.gate1 import PriorConfig, build_prior
-from ebpfn.gate2 import (
-    DescriptorConfig,
-    Gate2Config,
-    Gate2CoverageConfig,
-    build_cloud,
-    conditional_descriptor,
-    corpus_coverage,
-    descriptor_names,
-    variance_check,
-)
+from ebpfn.gate1 import PriorConfig
+from ebpfn.gate1 import build_prior
+from ebpfn.gate2 import DescriptorConfig
+from ebpfn.gate2 import Gate2Config
+from ebpfn.gate2 import Gate2CoverageConfig
+from ebpfn.gate2 import build_cloud
+from ebpfn.gate2 import conditional_descriptor
+from ebpfn.gate2 import corpus_coverage
+from ebpfn.gate2 import descriptor_names
+from ebpfn.gate2 import variance_check
 from ebpfn.priors import Dataset
 
 
@@ -117,8 +115,7 @@ def _corpus(tasks):
 
 
 def test_coverage_foreign_task_is_farther():
-    prior = build_prior(PriorConfig(scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0,
-                                    scm_noise_scale=0.15))
+    prior = build_prior(PriorConfig(scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0, scm_noise_scale=0.15))
     desc_cfg = DescriptorConfig(n_proj=24)
     cov_cfg = Gate2CoverageConfig(cloud_n_tasks=24, cloud_n_rows=200)
     rng = np.random.default_rng(0)
@@ -126,16 +123,15 @@ def test_coverage_foreign_task_is_farther():
     # A single (in, foreign) pair is a coin-flip on two noisy draws (either can land
     # in the prior's own distance tail); the property under test is distributional --
     # foreign tasks sit farther from the cloud than the prior's own samples do.
-    d_in = [cloud.distance(conditional_descriptor(prior.sample_task(200, 5, rng), desc_cfg, rng))
-            for _ in range(8)]
-    d_foreign = [cloud.distance(conditional_descriptor(_nonlinear_hetero_task(200, 5, rng), desc_cfg, rng))
-                 for _ in range(8)]
+    d_in = [cloud.distance(conditional_descriptor(prior.sample_task(200, 5, rng), desc_cfg, rng)) for _ in range(8)]
+    d_foreign = [
+        cloud.distance(conditional_descriptor(_nonlinear_hetero_task(200, 5, rng), desc_cfg, rng)) for _ in range(8)
+    ]
     assert np.median(d_foreign) > np.median(d_in)
 
 
 def test_variance_check_fails_in_distribution_passes_ood():
-    prior = build_prior(PriorConfig(scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0,
-                                    scm_noise_scale=0.15))
+    prior = build_prior(PriorConfig(scm_linear_weight=1.0, scm_mlp_weight=0.0, bnn_weight=0.0, scm_noise_scale=0.15))
     desc_cfg = DescriptorConfig(n_proj=24)
     cov_cfg = Gate2CoverageConfig(cloud_n_tasks=24, cloud_n_rows=200)
     gcfg = Gate2Config()

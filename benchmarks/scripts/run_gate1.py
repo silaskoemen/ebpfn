@@ -11,6 +11,7 @@ scatter figure to benchmarks/results/<run>/.
 `--quick` is a fast pilot (small PFN, few datasets) to validate the chain -- NOT
 a pre-registered run. Fix configs/thresholds before the confirmatory run (§4).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,20 +21,17 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-
-from ebpfn.gate1 import (
-    CorpusConfig,
-    CoverageConfig,
-    DownstreamConfig,
-    GateConfig,
-    PFNConfig,
-    PriorConfig,
-    build_prior,
-    corpus_calibration,
-    corpus_coverage,
-    corpus_null,
-    gate1_test,
-)
+from ebpfn.gate1 import CorpusConfig
+from ebpfn.gate1 import CoverageConfig
+from ebpfn.gate1 import DownstreamConfig
+from ebpfn.gate1 import GateConfig
+from ebpfn.gate1 import PFNConfig
+from ebpfn.gate1 import PriorConfig
+from ebpfn.gate1 import build_prior
+from ebpfn.gate1 import corpus_calibration
+from ebpfn.gate1 import corpus_coverage
+from ebpfn.gate1 import corpus_null
+from ebpfn.gate1 import gate1_test
 from ebpfn.gate1.corpus import load_corpus
 from ebpfn.gate1.pfn import train_pfn
 from ebpfn.gate1.plotting import make_gate_figure
@@ -46,8 +44,9 @@ def build_configs(args: argparse.Namespace) -> dict:
     if args.quick:
         return {
             "prior": PriorConfig(),
-            "pfn": PFNConfig(steps=args.steps or 300, embedding_size=64, num_layers=2,
-                             mlp_hidden_size=128, seed=args.seed),
+            "pfn": PFNConfig(
+                steps=args.steps or 300, embedding_size=64, num_layers=2, mlp_hidden_size=128, seed=args.seed
+            ),
             "corpus": CorpusConfig(max_datasets=4, max_tasks_per_dataset=3, n_max=1200, seed=args.seed),
             "coverage": CoverageConfig(cloud_n_tasks=20, cloud_n_rows=300, n_proj=100, n_boot=500),
             "downstream": DownstreamConfig(in_context_cap=200, test_cap=300, seed=args.seed),
@@ -101,7 +100,9 @@ def main() -> None:
     pl.DataFrame(cal_rows).write_parquet(out_dir / "calibration.parquet")
     (out_dir / "null.json").write_text(json.dumps(null, indent=2))
     (out_dir / "gate.json").write_text(json.dumps(result, indent=2))
-    (out_dir / "config.json").write_text(json.dumps({k: dataclasses.asdict(v) for k, v in cfg.items()}, indent=2, default=str))
+    (out_dir / "config.json").write_text(
+        json.dumps({k: dataclasses.asdict(v) for k, v in cfg.items()}, indent=2, default=str)
+    )
     (out_dir / "meta.json").write_text(json.dumps({"git_sha": _git_sha(), "n_tasks": len(corpus)}, indent=2))
 
     make_gate_figure(cov_rows, cal_rows, result).savefig(out_dir / "gate1_scatter.png", dpi=130)

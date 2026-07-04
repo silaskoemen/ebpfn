@@ -19,6 +19,7 @@ where T_cond/T_cal are the 99th-pct real-real' null thresholds for that cell.
     pixi run python benchmarks/scripts/pilot_region.py --quick    # fast smoke
     pixi run python benchmarks/scripts/pilot_region.py --only A
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,11 +33,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
-from scipy.stats import spearmanr
-
-from ebpfn.config import DataConfig, ExperimentConfig, SweepConfig
-from ebpfn.experiment import run_null, run_sweep, suggest_thresholds, summarize
+from ebpfn.config import ExperimentConfig
+from ebpfn.config import SweepConfig
+from ebpfn.experiment import run_null
+from ebpfn.experiment import run_sweep
+from ebpfn.experiment import suggest_thresholds
+from ebpfn.experiment import summarize
 from ebpfn.results import save_run
+from scipy.stats import spearmanr
 
 RESULTS_ROOT = Path(__file__).resolve().parents[1] / "results"
 
@@ -55,10 +59,17 @@ def _sigma_pair(ratio: float) -> tuple[float, float]:
 
 def _base_sweep(args: argparse.Namespace) -> dict:
     if args.quick:
-        return dict(n_seeds=3, n_tasks_per_prior=12, cloud_n_rows=400,
-                    n_calib_tasks=1, calib_n_train=1500, calib_n_test=1500)
-    return dict(n_seeds=args.seeds, n_tasks_per_prior=args.tasks, cloud_n_rows=600,
-                n_calib_tasks=1, calib_n_train=2000, calib_n_test=2000)
+        return dict(
+            n_seeds=3, n_tasks_per_prior=12, cloud_n_rows=400, n_calib_tasks=1, calib_n_train=1500, calib_n_test=1500
+        )
+    return dict(
+        n_seeds=args.seeds,
+        n_tasks_per_prior=args.tasks,
+        cloud_n_rows=600,
+        n_calib_tasks=1,
+        calib_n_train=2000,
+        calib_n_test=2000,
+    )
 
 
 def _quick_trims(cfg: ExperimentConfig, args: argparse.Namespace) -> ExperimentConfig:
@@ -100,8 +111,11 @@ def _region_summary(df: pl.DataFrame, axis: str, group: str | None) -> pl.DataFr
         sub = df if group is None else df.filter(pl.col(group) == gval)
         sub = sub.sort(axis)
         passed = sub.filter(pl.col("passes"))
-        rho = spearmanr(sub["cond_mmd_mean"].to_numpy(), sub["nll_gap"].to_numpy()).correlation \
-            if sub.height >= 3 else float("nan")
+        rho = (
+            spearmanr(sub["cond_mmd_mean"].to_numpy(), sub["nll_gap"].to_numpy()).correlation
+            if sub.height >= 3
+            else float("nan")
+        )
         row = {
             "n_pass": passed.height,
             "frac_pass": passed.height / sub.height if sub.height else 0.0,
@@ -146,22 +160,30 @@ def run_construction_a(base: ExperimentConfig, args: argparse.Namespace) -> None
     cells = []
     for ratio in SIGMA_RATIOS:
         hi, lo = _sigma_pair(ratio)
-        data = dataclasses.replace(base.data, band_geometry="fixed_mass",
-                                   band_mass=args.band_mass, sigma_hi=hi, sigma_lo=lo)
+        data = dataclasses.replace(
+            base.data, band_geometry="fixed_mass", band_mass=args.band_mass, sigma_hi=hi, sigma_lo=lo
+        )
         sweep = SweepConfig(construction="A", values=g_grid, **sweep_kw)
         cfg = _quick_trims(dataclasses.replace(base, data=data, sweep=sweep, seed=args.seed), args)
         print(f"[A] sigma_ratio={ratio:g} (hi={hi:.3f} lo={lo:.3f}) band_mass={args.band_mass} g={g_grid}")
-        summ = _run_cell(cfg).with_columns(
-            pl.lit(ratio).alias("sigma_ratio"), pl.lit(args.band_mass).alias("band_mass")
-        ).rename({"value": "g"})
+        summ = (
+            _run_cell(cfg)
+            .with_columns(pl.lit(ratio).alias("sigma_ratio"), pl.lit(args.band_mass).alias("band_mass"))
+            .rename({"value": "g"})
+        )
         cells.append(summ)
 
     df = pl.concat(cells)
     region = _region_summary(df, axis="g", group="sigma_ratio")
     out = RESULTS_ROOT / "pilot_A"
     save_run(out, base, {"cells": df, "region": region})
-    _heatmap(df, "sigma_ratio", "g", out / "pass_heatmap_A.png",
-             f"Construction A (fixed_mass m={args.band_mass}): Gate-0 pass region")
+    _heatmap(
+        df,
+        "sigma_ratio",
+        "g",
+        out / "pass_heatmap_A.png",
+        f"Construction A (fixed_mass m={args.band_mass}): Gate-0 pass region",
+    )
     _report("A", df, region, out)
 
 

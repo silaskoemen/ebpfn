@@ -9,23 +9,26 @@ The architecture is unchanged: per-cell feature/target embeddings, then a stack
 of blocks alternating attention between features and between datapoints (with the
 train/test causal split), then an MLP decoder over the target column.
 """
+
 from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn.modules.transformer import Linear, MultiheadAttention, LayerNorm
+from torch.nn.modules.transformer import LayerNorm
+from torch.nn.modules.transformer import Linear
+from torch.nn.modules.transformer import MultiheadAttention
 
 
 class PFNTransformer(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int,
-                 num_layers: int, num_outputs: int):
+    def __init__(
+        self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int
+    ):
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList(
-            TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size)
-            for _ in range(num_layers)
+            TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size) for _ in range(num_layers)
         )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
@@ -70,13 +73,23 @@ class TargetEncoder(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
-                 layer_norm_eps: float = 1e-5, batch_first: bool = True, device=None, dtype=None):
+    def __init__(
+        self,
+        embedding_size: int,
+        nhead: int,
+        mlp_hidden_size: int,
+        layer_norm_eps: float = 1e-5,
+        batch_first: bool = True,
+        device=None,
+        dtype=None,
+    ):
         super().__init__()
         self.self_attention_between_datapoints = MultiheadAttention(
-            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
+        )
         self.self_attention_between_features = MultiheadAttention(
-            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
+        )
         self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
         self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
         self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)

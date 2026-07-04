@@ -4,6 +4,7 @@ Head-agnostic: works off any fitted `Predictive` (Gaussian or quantile). Reports
 NLL (primary) and CRPS as proper scores, PIT non-uniformity (KS vs Uniform), and
 central-interval coverage at the requested levels.
 """
+
 from __future__ import annotations
 
 import numpy as np

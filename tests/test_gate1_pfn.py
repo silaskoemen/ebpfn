@@ -1,14 +1,18 @@
 """PFN regressor: bar-distribution correctness (the delicate piece) + an
 end-to-end train/predict plumbing smoke. plans/gate1_revised.md §3.2."""
+
 from __future__ import annotations
 
 import numpy as np
 import torch
-
 from ebpfn.calibration import calibration_report
-from ebpfn.gate1 import PriorConfig, build_prior
+from ebpfn.gate1 import PriorConfig
+from ebpfn.gate1 import build_prior
 from ebpfn.gate1.config import PFNConfig
-from ebpfn.gate1.pfn import BarDistribution, build_model, normal_borders, train_pfn
+from ebpfn.gate1.pfn import BarDistribution
+from ebpfn.gate1.pfn import build_model
+from ebpfn.gate1.pfn import normal_borders
+from ebpfn.gate1.pfn import train_pfn
 from ebpfn.priors import Dataset
 
 
@@ -62,9 +66,19 @@ def test_train_and_predict_smoke():
     """Tiny train -> in-context predict -> calibration_report returns finite,
     in-range scores. Plumbing only (too few steps to assert calibration)."""
     prior = build_prior(PriorConfig())
-    cfg = PFNConfig(steps=20, batch_size=4, num_bins=32, embedding_size=32,
-                    num_attention_heads=2, mlp_hidden_size=64, num_layers=1,
-                    n_rows_min=64, n_rows_max=96, device="cpu", seed=0)
+    cfg = PFNConfig(
+        steps=20,
+        batch_size=4,
+        num_bins=32,
+        embedding_size=32,
+        num_attention_heads=2,
+        mlp_hidden_size=64,
+        num_layers=1,
+        n_rows_min=64,
+        n_rows_max=96,
+        device="cpu",
+        seed=0,
+    )
     reg = train_pfn(prior, cfg, log_every=0)
 
     D = prior.sample_task(160, 4, np.random.default_rng(1))

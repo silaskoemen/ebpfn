@@ -13,6 +13,7 @@ fixed-effects ablation -- and print one decisive verdict.
 NOT pre-registered. Thresholds/configs are frozen in ebpfn/gate2/config.py before
 the confirmatory run.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,27 +23,22 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-
-from ebpfn.gate1 import (
-    CorpusConfig,
-    DownstreamConfig,
-    PFNConfig,
-    build_prior,
-    corpus_calibration,
-)
+from ebpfn.gate1 import CorpusConfig
+from ebpfn.gate1 import DownstreamConfig
+from ebpfn.gate1 import PFNConfig
+from ebpfn.gate1 import build_prior
+from ebpfn.gate1 import corpus_calibration
 from ebpfn.gate1.corpus import load_corpus
 from ebpfn.gate1.pfn import train_pfn
-from ebpfn.gate2 import (
-    DescriptorConfig,
-    Gate2Config,
-    Gate2CoverageConfig,
-    ablation_test,
-    corpus_coverage,
-    format_report,
-    gate2_verdict,
-    prior_ladder,
-    variance_check,
-)
+from ebpfn.gate2 import DescriptorConfig
+from ebpfn.gate2 import Gate2Config
+from ebpfn.gate2 import Gate2CoverageConfig
+from ebpfn.gate2 import ablation_test
+from ebpfn.gate2 import corpus_coverage
+from ebpfn.gate2 import format_report
+from ebpfn.gate2 import gate2_verdict
+from ebpfn.gate2 import prior_ladder
+from ebpfn.gate2 import variance_check
 from ebpfn.results import _git_sha
 
 RESULTS_ROOT = Path(__file__).resolve().parents[1] / "results"
@@ -51,10 +47,10 @@ RESULTS_ROOT = Path(__file__).resolve().parents[1] / "results"
 def build_configs(args: argparse.Namespace) -> dict:
     if args.quick:
         return {
-            "pfn": PFNConfig(steps=args.steps or 300, embedding_size=64, num_layers=2,
-                             mlp_hidden_size=128, d_max=8, seed=args.seed),
-            "corpus": CorpusConfig(max_datasets=4, max_tasks_per_dataset=3, n_max=1200,
-                                   d_max=8, seed=args.seed),
+            "pfn": PFNConfig(
+                steps=args.steps or 300, embedding_size=64, num_layers=2, mlp_hidden_size=128, d_max=8, seed=args.seed
+            ),
+            "corpus": CorpusConfig(max_datasets=4, max_tasks_per_dataset=3, n_max=1200, d_max=8, seed=args.seed),
             "descriptor": DescriptorConfig(n_proj=24, n0=200, seed=args.seed),
             "coverage": Gate2CoverageConfig(cloud_n_tasks=16, cloud_n_rows=200, seed=args.seed),
             "downstream": DownstreamConfig(in_context_cap=200, test_cap=300, seed=args.seed),
@@ -103,8 +99,7 @@ def main() -> None:
             cal = cal_by.get((r["source_did"], r["target"]))
             if cal is None:
                 continue
-            all_rows.append({"prior": name, **r, "nll": cal["nll"], "crps": cal["crps"],
-                             "pit_stat": cal["pit_stat"]})
+            all_rows.append({"prior": name, **r, "nll": cal["nll"], "crps": cal["crps"], "pit_stat": cal["pit_stat"]})
 
     priors = list(ladder)
     # Part A uses the reference (balanced) prior's coverage rows.
@@ -117,10 +112,11 @@ def main() -> None:
     pl.DataFrame(all_rows).write_parquet(out_dir / "rows.parquet")
     (out_dir / "gate2.json").write_text(json.dumps(result, indent=2))
     (out_dir / "config.json").write_text(
-        json.dumps({k: dataclasses.asdict(v) for k, v in cfg.items()}, indent=2, default=str))
+        json.dumps({k: dataclasses.asdict(v) for k, v in cfg.items()}, indent=2, default=str)
+    )
     (out_dir / "meta.json").write_text(
-        json.dumps({"git_sha": _git_sha(), "n_tasks": len(corpus), "ref_prior": ref,
-                    "priors": priors}, indent=2))
+        json.dumps({"git_sha": _git_sha(), "n_tasks": len(corpus), "ref_prior": ref, "priors": priors}, indent=2)
+    )
 
     print("\n" + format_report(result))
     print(f"\n[gate2] wrote tables + verdict to {out_dir}")

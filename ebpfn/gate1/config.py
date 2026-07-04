@@ -1,5 +1,6 @@
 """Gate-1 (revised) configuration -- explicit knobs, no magic numbers at call
 sites (same discipline as Gate-0's config.py)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

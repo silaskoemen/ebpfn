@@ -14,16 +14,26 @@ each on the data regime that makes it a fair, clean measurement:
 Returns three tidy (long) polars frames so the lambda and K sub-sweeps stay
 separable. Seeds give the CIs; the calibration gap is seed-paired (spec §5).
 """
+
 from __future__ import annotations
 
 import numpy as np
 import polars as pl
 
 from ebpfn.calibration import calibration_report
-from ebpfn.config import ExperimentConfig, Prior
-from ebpfn.distance import cloud_recall, inside_band, make_sotdd_fn, null_band
-from ebpfn.mmd import CellPartition, aggregate, per_cell_mmd
-from ebpfn.priors import draw_params, pool, realize, sample_cloud
+from ebpfn.config import ExperimentConfig
+from ebpfn.config import Prior
+from ebpfn.distance import cloud_recall
+from ebpfn.distance import inside_band
+from ebpfn.distance import make_sotdd_fn
+from ebpfn.distance import null_band
+from ebpfn.mmd import CellPartition
+from ebpfn.mmd import aggregate
+from ebpfn.mmd import per_cell_mmd
+from ebpfn.priors import draw_params
+from ebpfn.priors import pool
+from ebpfn.priors import realize
+from ebpfn.priors import sample_cloud
 from ebpfn.regressor import train_prob_regressor
 
 
@@ -40,12 +50,18 @@ def sotdd_rows(real_probe, real_ref, decoy_cloud, value, seed_idx, cfg, rng) -> 
         dist_fn = make_sotdd_fn(lam, dc.n_proj, rng, p=dc.p)
         band = null_band(real_probe, real_ref, dist_fn, rng, alpha=dc.null_alpha)
         decoy_mean = float(cloud_recall(real_probe, decoy_cloud, dist_fn).mean())
-        rows.append({
-            "value": value, "seed": seed_idx, "lam": lam,
-            "decoy_recall": decoy_mean,
-            "null_lo": band["band_lo"], "null_hi": band["band_hi"], "null_mean": band["mean"],
-            "inside_band": inside_band(decoy_mean, band),
-        })
+        rows.append(
+            {
+                "value": value,
+                "seed": seed_idx,
+                "lam": lam,
+                "decoy_recall": decoy_mean,
+                "null_lo": band["band_lo"],
+                "null_hi": band["band_hi"],
+                "null_mean": band["mean"],
+                "inside_band": inside_band(decoy_mean, band),
+            }
+        )
     return rows
 
 
@@ -57,14 +73,25 @@ def mmd_rows(real_pool, decoy_pool, value, seed_idx, cfg, rng) -> list[dict]:
     for k in mc.n_cells_grid:
         cells = CellPartition(k, mc.method, rng).fit(Xcat)
         cell_mmd = per_cell_mmd(
-            real_pool, decoy_pool, cells,
-            bandwidth=mc.bandwidth, min_per_cell=mc.min_per_cell, max_per_cell=mc.max_per_cell, rng=rng,
+            real_pool,
+            decoy_pool,
+            cells,
+            bandwidth=mc.bandwidth,
+            min_per_cell=mc.min_per_cell,
+            max_per_cell=mc.max_per_cell,
+            rng=rng,
         )
         agg = aggregate(cell_mmd)
-        rows.append({
-            "value": value, "seed": seed_idx, "n_cells": k,
-            "mmd_mean": agg["mean"], "mmd_max": agg["max"], "cells_used": agg["n_cells"],
-        })
+        rows.append(
+            {
+                "value": value,
+                "seed": seed_idx,
+                "n_cells": k,
+                "mmd_mean": agg["mean"],
+                "mmd_max": agg["max"],
+                "cells_used": agg["n_cells"],
+            }
+        )
     return rows
 
 
@@ -90,9 +117,13 @@ def calib_gap_row(prior_ref: Prior, prior_alt: Prior, value, seed_idx, cfg, rng)
         nll_ref_l.append(rep_ref["nll"])
         nll_alt_l.append(rep_alt["nll"])
     return {
-        "value": value, "seed": seed_idx, "head": kind,
-        "nll_gap": float(np.mean(nll_gaps)), "crps_gap": float(np.mean(crps_gaps)),
-        "nll_ref": float(np.mean(nll_ref_l)), "nll_alt": float(np.mean(nll_alt_l)),
+        "value": value,
+        "seed": seed_idx,
+        "head": kind,
+        "nll_gap": float(np.mean(nll_gaps)),
+        "crps_gap": float(np.mean(crps_gaps)),
+        "nll_ref": float(np.mean(nll_ref_l)),
+        "nll_alt": float(np.mean(nll_alt_l)),
     }
 
 
@@ -118,17 +149,19 @@ def summarize(frames: dict[str, pl.DataFrame], cfg: ExperimentConfig) -> pl.Data
             p = float(wilcoxon(gaps, alternative="greater").pvalue) if (gaps != 0).any() else 1.0
         except ValueError:
             p = 1.0
-        rows.append({
-            "value": value,
-            "decoy_recall": float(s["decoy_recall"].mean()),
-            "null_lo": float(s["null_lo"].mean()),
-            "null_hi": float(s["null_hi"].mean()),
-            "otdd_covered": bool(s["inside_band"].mean() >= 0.5),
-            "cond_mmd_mean": float(m["mmd_mean"].mean()),
-            "cond_mmd_max": float(m["mmd_max"].mean()),
-            "nll_gap": float(gaps.mean()),
-            "nll_gap_wilcoxon_p": p,
-        })
+        rows.append(
+            {
+                "value": value,
+                "decoy_recall": float(s["decoy_recall"].mean()),
+                "null_lo": float(s["null_lo"].mean()),
+                "null_hi": float(s["null_hi"].mean()),
+                "otdd_covered": bool(s["inside_band"].mean() >= 0.5),
+                "cond_mmd_mean": float(m["mmd_mean"].mean()),
+                "cond_mmd_max": float(m["mmd_max"].mean()),
+                "nll_gap": float(gaps.mean()),
+                "nll_gap_wilcoxon_p": p,
+            }
+        )
     return pl.DataFrame(rows).sort("value")
 
 
