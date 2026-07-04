@@ -1,0 +1,5 @@
+**/*.parquet
+**/*.json
+**/*.pdf
+**/*.csv
+**/*.png

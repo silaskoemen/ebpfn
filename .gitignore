@@ -1,0 +1,103 @@
+*.py[cod]
+__pycache__
+
+# Temp files
+.*.sw[po]
+*~
+*.bak
+.DS_Store
+
+# Temp/storage files
+plans/
+explore/
+
+# Optuna studies
+**/*.db
+
+# C extensions
+*.so
+
+# Build and package files
+.pixi/
+catboost_info/
+*.egg
+*.egg-info
+.bootstrap
+.build
+.cache
+.eggs
+.env
+.installed.cfg
+.ve
+bin
+build
+develop-eggs
+dist
+eggs
+lib
+lib64
+parts
+pip-wheel-metadata/
+pyvenv*/
+sdist
+var
+venv*/
+wheelhouse
+.venv*/
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.benchmarks
+.coverage
+.coverage.*
+.pytest
+.pytest_cache/
+.tox
+coverage.xml
+htmlcov
+nosetests.xml
+
+# Translations
+*.mo
+
+# Buildout
+.mr.developer.cfg
+
+# IDE project files
+*.iml
+*.komodoproject
+.idea
+.project
+.pydevproject
+.vscode
+
+# Complexity
+output/*.html
+output/*/index.html
+
+# Sphinx
+docs/_build
+
+# Mypy Cache
+.mypy_cache/
+
+# Data files
+**/raw/**
+!benchmarks/results/raw/.gitkeep
+**/data.npy
+examples/m5/*
+
+# Debug files
+
+*debug*
+
+# Latex
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.dvi
+*.gz
