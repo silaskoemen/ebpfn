@@ -2,14 +2,11 @@
 
 Empirical-Bayes PFN experiments for tabular regression.
 
-The repository tests whether dataset-level learning geometry can be diagnosed
-from real tabular tasks and used as a coverage surrogate for tuning PFN-style
-priors. The current codebase contains:
-
-- Gate 0 toy prior and distance/MMD diagnostics.
-- Gate 1 PFN/prior pairing and calibration checks.
-- Gate 2 conditional-structure descriptors, descriptor-cloud coverage, and
-  across-prior fixed-effects ablations.
+The repository implements a staged system for adapting a hierarchical synthetic
+regression-task prior to one supplied tabular dataset. The current foundation
+provides strict configuration, deterministic random streams,
+leakage-safe source splits, Polars task contracts, explicit rotations, and
+OpenML ingestion at the benchmark boundary.
 
 ## Development
 
@@ -19,23 +16,18 @@ Install the Pixi environment:
 pixi install
 ```
 
-Run tests:
+Run the acceptance checks:
 
 ```bash
+pixi run lint
 pixi run test
 ```
 
-Run the Gate-2 quick wiring check:
+Prepare the configured OpenML source through the Hydra application boundary:
 
 ```bash
-pixi run gate2-quick
+pixi run prepare-data
 ```
 
-Run the full Gate-2 experiment:
-
-```bash
-pixi run gate2 --name gate2_full --steps 4000
-```
-
-The OpenML-backed corpus loader needs network access the first time datasets are
-cached under `data/raw/openml`.
+OpenML acquisition needs network access the first time a task is cached under
+`data/raw/openml`. Reusable package code does not import OpenML or Hydra.

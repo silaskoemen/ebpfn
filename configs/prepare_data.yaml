@@ -1,0 +1,29 @@
+defaults:
+  - mode: fast
+  - _self_
+
+openml:
+  task_id: 361099
+  cache_dir: data/raw/openml
+  repeat: 0
+  fold: 0
+  sample: 0
+
+data:
+  split:
+    seed: 0
+    policy_version: split-2
+    final_test_fraction: 0.2
+    probe_score_fraction_of_train: 0.25
+    min_probe_fit: 64
+    min_probe_score: 32
+    min_final_test: 32
+  preprocessing:
+    max_features: 100
+    clip: 4.0
+    constant_atol: 1.0e-12
+    constant_rtol: 1.0e-12
+    scale_epsilon: 1.0e-12
+    version: preprocess-1
+  rotations:
+    enabled: false

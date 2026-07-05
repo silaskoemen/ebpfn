@@ -5,25 +5,23 @@ build-backend = "hatchling.build"
 [project]
 name = "ebpfn"
 version = "0.1.0"
-description = "Empirical-Bayes PFN experiments for conditional-structure coverage on tabular regression tasks."
+description = "Empirical-Bayes prior tuning for tabular regression PFNs."
 authors = [
     { name = "Silas Koemen", email = "kpsilas@gmail.com" },
 ]
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "catboost>=1.2.10,<2",
-    "lightgbm>=4.6.0,<5",
-    "matplotlib>=3.11.0,<4",
     "numpy>=2.4.6,<3",
+    "polars>=1.41.2,<2",
+    "pydantic>=2.12,<3",
+]
+
+[project.optional-dependencies]
+bench = [
+    "hydra-core>=1.3.2,<2",
     "openml>=0.15.1,<0.16",
     "pandas>=2.0,<3",
-    "polars>=1.41.2,<2",
-    "POT>=0.9.6.post1,<0.10",
-    "scikit-learn>=1.9.0,<2",
-    "scipy>=1.17.1,<2",
-    "tabpfn>=8.0.1,<9",
-    "torch>=2.1,<2.10",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -33,7 +31,9 @@ packages = ["ebpfn"]
 include = [
     "ebpfn",
     "benchmarks",
+    "configs",
     "plans",
+    "scripts",
     "tests",
     "pyproject.toml",
     "pixi.toml",
@@ -48,7 +48,7 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-src = ["ebpfn", "tests", "benchmarks"]
+src = ["ebpfn", "tests", "benchmarks", "scripts"]
 exclude = [
     ".git",
     ".pixi",

@@ -1,36 +1,36 @@
 [workspace]
 name = "ebpfn"
 version = "0.1.0"
-description = "Empirical-Bayes PFN experiments for conditional-structure coverage on tabular regression tasks."
+description = "Empirical-Bayes prior tuning for tabular regression PFNs."
 authors = ["Silas Koemen <kpsilas@gmail.com>"]
 channels = ["conda-forge"]
 platforms = ["osx-arm64"]
 
 [tasks]
 setup = "pre-commit install && pip install -e ."
-test = "pytest -q"
-smoke = "python benchmarks/scripts/smoke.py"
-sweep = "python benchmarks/scripts/run_sweep.py"
-gate1 = "python benchmarks/scripts/run_gate1.py"
-gate2 = "python benchmarks/scripts/run_gate2.py"
-gate2-quick = "python benchmarks/scripts/run_gate2.py --quick"
-format = "ruff format ebpfn tests benchmarks"
+test = "python -m pytest -q"
+prepare-data = "python -m scripts.data.prepare_data"
+format = "ruff format ebpfn tests benchmarks scripts"
 clean = "rm -rf build dist *.egg-info .pytest_cache .ruff_cache catboost_info"
-
-[activation.env]
-# torch + catboost/lightgbm each link a libomp; allow the duplicate (standard macOS workaround).
-KMP_DUPLICATE_LIB_OK = "TRUE"
 
 [dependencies]
 python = ">=3.11,<3.13"
 pip = "*"
 hatchling = "*"
+numpy = ">=2.4.6,<3"
+polars = ">=1.41.2,<2"
+pydantic = ">=2.12,<3"
 
 [pypi-dependencies]
 ebpfn = { path = ".", editable = true }
 
 [feature.test.dependencies]
 pytest = ">=9.1.0,<10"
+
+[feature.bench.pypi-dependencies]
+hydra-core = ">=1.3.2,<2"
+openml = ">=0.15.1,<0.16"
+pandas = ">=2.0,<3"
 
 [feature.lint.dependencies]
 ruff = "*"
@@ -53,7 +53,9 @@ build-wheel = "python -m build --no-isolation ."
 check-wheel = "twine check dist/*"
 
 [environments]
-default = ["test", "lint", "dev"]
+default = ["bench", "test", "lint", "dev"]
+core = []
+bench = ["bench"]
 test = ["test"]
 lint = ["lint"]
 build = ["build"]
