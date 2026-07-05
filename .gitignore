@@ -8,8 +8,8 @@ __pycache__
 .DS_Store
 
 # Temp/storage files
-plans/
-explore/
+plans/*
+explore/*
 
 # Optuna studies
 **/*.db
