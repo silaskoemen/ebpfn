@@ -15,6 +15,7 @@ from ebpfn.config import SplitConfig
 from ebpfn.data import FeatureSchema
 from ebpfn.data import RawTabularTask
 from ebpfn.data import RotationDefinition
+from ebpfn.data import TaskPartition
 from ebpfn.data import build_evaluation_task
 from ebpfn.data import characterization_shape
 from ebpfn.data import create_source_split
@@ -111,6 +112,32 @@ def test_raw_task_defensively_copies_inputs_and_rejects_target_leakage():
         )
 
 
+def test_probe_fit_missingness_rates_survive_imputation():
+    task = _task()
+    values = task.X["x"].to_numpy().copy()
+    values[:20] = np.nan
+    task = RawTabularTask(
+        task.task_id,
+        task.source_id,
+        task.target_name,
+        task.X.with_columns(pl.Series("x", values)),
+        task.y,
+        task.row_ids,
+        task.task_type,
+        task.schema,
+    )
+    split = create_source_split(
+        task.source_id,
+        len(task.y),
+        _split_config(min_probe_fit=20, min_probe_score=10, min_final_test=10),
+    )
+    result = build_evaluation_task(task, split, _config())
+    assert result.task is not None
+    fit_ids = np.asarray(split.probe_fit_ids)
+    expected = float(np.mean(fit_ids < 20))
+    assert result.task.tuning.probe_fit_missing_rates[0] == pytest.approx(expected)
+
+
 def test_raw_task_rejects_noncanonical_positional_ids():
     task = _task()
     shifted_ids = task.row_ids + 1
@@ -124,6 +151,15 @@ def test_raw_task_rejects_noncanonical_positional_ids():
             shifted_ids,
             task.task_type,
             task.schema,
+        )
+
+
+def test_task_partition_rejects_empty_partitions():
+    with pytest.raises(ValueError, match="nonempty"):
+        TaskPartition(
+            pl.DataFrame({"x": []}, schema={"x": pl.Float64}),
+            np.array([]),
+            np.array([], dtype=np.int64),
         )
 
 

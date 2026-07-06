@@ -10,6 +10,7 @@ platforms = ["osx-arm64"]
 setup = "pre-commit install && pip install -e ."
 test = "python -m pytest -q"
 prepare-data = "python -m scripts.data.prepare_data"
+characterize = "python -m scripts.studies.characterize"
 format = "ruff format ebpfn tests benchmarks scripts"
 clean = "rm -rf build dist *.egg-info .pytest_cache .ruff_cache catboost_info"
 

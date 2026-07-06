@@ -1,6 +1,7 @@
 import ast
 from pathlib import Path
 
+from ebpfn.config import CharacterizationStudyConfig
 from hydra import compose
 from hydra import initialize_config_dir
 from omegaconf import OmegaConf
@@ -43,3 +44,14 @@ def test_hydra_configuration_is_independent_of_working_directory(tmp_path, monke
     actual = _resolved_config(config_dir)
     assert actual == expected
     assert actual["mode"]["name"] == "audit"
+
+
+def test_characterization_study_configuration_is_strict_and_resolved():
+    config_dir = (Path(__file__).parents[2] / "configs").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        raw = compose(config_name="characterization", overrides=["characterization_mode=fast"])
+    resolved = OmegaConf.to_container(raw, resolve=True)
+    assert isinstance(resolved, dict)
+    config = CharacterizationStudyConfig.model_validate(resolved)
+    assert config.mode.name == "fast"
+    assert config.characterization.maps.max_rff == 256

@@ -140,6 +140,8 @@ class TaskPartition:
         row_ids = _copy_vector(self.row_ids, name="row_ids", dtype=np.int64)
         if frame.height != len(y) or len(y) != len(row_ids):
             raise ValueError("partition arrays must have aligned lengths")
+        if not len(y):
+            raise ValueError("task partitions must be nonempty")
         if len(np.unique(row_ids)) != len(row_ids):
             raise ValueError("partition row IDs must be unique")
         _validate_regression_target(y, allow_missing=False)
@@ -159,6 +161,7 @@ class TuningTask:
     probe_score: TaskPartition
     schema: FeatureSchema
     preprocessing_id: str
+    probe_fit_missing_rates: tuple[float, ...]
 
     def __post_init__(self) -> None:
         if self.task_type != "regression":
@@ -166,6 +169,11 @@ class TuningTask:
         expected = self.schema.names
         if tuple(self.probe_fit.X.columns) != expected or tuple(self.probe_score.X.columns) != expected:
             raise ValueError("tuning partitions must match the task schema")
+        if len(self.probe_fit_missing_rates) != len(expected):
+            raise ValueError("probe-fit missingness rates must align with the task schema")
+        if any(not np.isfinite(rate) or not 0.0 <= rate <= 1.0 for rate in self.probe_fit_missing_rates):
+            raise ValueError("probe-fit missingness rates must be finite fractions")
+        object.__setattr__(self, "probe_fit_missing_rates", tuple(float(rate) for rate in self.probe_fit_missing_rates))
         _validate_target_variation(self.probe_fit.y, role="probe-fit")
 
 

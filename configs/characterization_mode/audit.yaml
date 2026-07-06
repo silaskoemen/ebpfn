@@ -1,0 +1,8 @@
+# @package mode
+
+name: audit
+output_dir: benchmarks/results/characterization/audit
+repeats: 5
+n_probe_fit: 480
+n_probe_score: 160
+n_features: 8

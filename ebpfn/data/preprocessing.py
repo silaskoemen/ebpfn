@@ -16,6 +16,7 @@ class FeatureTransform:
     impute: tuple[float, ...]
     center: tuple[float, ...]
     scale: tuple[float, ...]
+    probe_fit_missing_rates: tuple[float, ...]
     excluded_categorical: tuple[str, ...]
     removed_constant: tuple[str, ...]
     clip: float
@@ -48,6 +49,7 @@ def fit_feature_transform(frame: pl.DataFrame, schema: FeatureSchema, config: Pr
     impute: list[float] = []
     center: list[float] = []
     scale: list[float] = []
+    missing_rates: list[float] = []
     categorical: list[str] = []
     constant: list[str] = []
     for name, kind in zip(schema.names, schema.kinds, strict=True):
@@ -55,6 +57,7 @@ def fit_feature_transform(frame: pl.DataFrame, schema: FeatureSchema, config: Pr
             categorical.append(name)
             continue
         values = frame.get_column(name).cast(pl.Float64, strict=False).to_numpy().astype(float, copy=True)
+        missing_rate = float(np.mean(~np.isfinite(values)))
         finite = values[np.isfinite(values)]
         if not len(finite):
             constant.append(name)
@@ -83,18 +86,20 @@ def fit_feature_transform(frame: pl.DataFrame, schema: FeatureSchema, config: Pr
         impute.append(fill)
         center.append(feature_center)
         scale.append(feature_scale)
+        missing_rates.append(missing_rate)
     if not names:
         raise ValueError("no usable numeric or binary predictors remain")
     if len(names) > config.max_features:
         raise ValueError(f"task has {len(names)} usable predictors; maximum is {config.max_features}")
     output_schema = schema.select(tuple(names))
-    identity_inputs = (schema, output_schema, impute, center, scale, categorical, constant, config)
+    identity_inputs = (schema, output_schema, impute, center, scale, missing_rates, categorical, constant, config)
     return FeatureTransform(
         schema,
         output_schema,
         tuple(impute),
         tuple(center),
         tuple(scale),
+        tuple(missing_rates),
         tuple(categorical),
         tuple(constant),
         config.clip,

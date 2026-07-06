@@ -62,6 +62,7 @@ def build_evaluation_task(task: RawTabularTask, split: SourceSplit, config: Data
             score,
             transform.output_schema,
             transform.transform_id,
+            transform.probe_fit_missing_rates,
         )
     except (TypeError, ValueError) as error:
         rejected = replace(report, admitted=False, reasons=(*report.reasons, str(error)))
