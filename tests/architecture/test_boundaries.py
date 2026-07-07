@@ -31,10 +31,15 @@ def test_application_dependencies_do_not_enter_reusable_modules():
     assert not violations, f"application dependency found in reusable modules: {sorted(set(violations))}"
 
 
-def test_executables_are_separated_from_benchmark_data_adapters():
+def test_operational_scripts_are_separated_from_scientific_benchmarks():
+    # scripts/ holds operational entry points (prepare, tune, train); benchmarks/
+    # holds paper-facing studies, diagnostics, comparisons, and ablations.
+    assert Path("scripts/prepare_data.py").is_file()
     assert Path("benchmarks/data/openml.py").is_file()
-    assert Path("scripts/data/prepare_data.py").is_file()
-    assert Path("scripts/studies").is_dir()
+    assert Path("benchmarks/studies").is_dir()
+    assert Path("benchmarks/diagnostics").is_dir()
+    assert not Path("scripts/studies").exists()
+    assert not Path("scripts/diagnostics").exists()
 
 
 def test_hydra_configuration_is_independent_of_working_directory(tmp_path, monkeypatch):

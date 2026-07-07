@@ -1,1 +1,1 @@
-"""Executable study and diagnostic modules."""
+"""Operational entry points: preparing data, tuning a prior, training a model."""
