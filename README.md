@@ -41,5 +41,18 @@ validated row/feature applicability bounds are recorded explicitly. Study tables
 schemas, configuration, provenance, and decisions are written below
 `benchmarks/results/characterization`.
 
+Run the Step 3 hierarchical-prior p-complexity audit:
+
+```bash
+pixi run prior-audit
+```
+
+Use `prior_mode=audit` for the denser feature grid. The generator samples varied
+task mechanisms over four routes (SCM, BNN, tree, compositional) at a requested
+shape; the audit checks route-frequency convergence, reproducibility, and that
+per-route complexity and realized SNR stay controlled across the feature grid.
+The joint-Sobol identifiability study is deferred to Step 4. Artifacts are written
+below `benchmarks/results/prior`.
+
 OpenML acquisition needs network access the first time a task is cached under
 `data/raw/openml`. Reusable package code does not import OpenML or Hydra.

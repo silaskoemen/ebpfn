@@ -1,0 +1,7 @@
+# @package mode
+name: fast
+output_dir: benchmarks/results/prior/fast
+feature_grid: [4, 16, 64]
+n_probe_fit: 160
+n_probe_score: 80
+n_tasks: 24

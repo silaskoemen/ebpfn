@@ -8,6 +8,7 @@ import numpy as np
 
 
 class RandomRole(StrEnum):
+    GENERATION = "generation"
     SEARCH = "search"
     SELECTION = "selection"
     FINAL_AUDIT = "final_audit"
