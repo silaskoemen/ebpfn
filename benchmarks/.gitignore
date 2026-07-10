@@ -1,5 +1,9 @@
 **/*.parquet
 **/*.json
+**/*.jsonl
+**/*.log
 **/*.pdf
 **/*.csv
 **/*.png
+**/*.sqlite
+results/**/*.md

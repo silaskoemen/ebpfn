@@ -1,11 +1,11 @@
-defaults:
-  - characterization_mode: fast
-  - _self_
-
-dataset: synthetic_handbuilt
+mode:
+  name: fast
+repeats: 1
+max_rows: 1000
+max_features: 6
+dataset: concrete
 output_root: benchmarks/results/characterization
 probe_score_fraction: 0.25
-
 characterization:
   version: characterization-1
   seed: 0
@@ -20,7 +20,14 @@ characterization:
     weight: uniform
     feature_view: frozen
   maps:
-    bin_quantiles: [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+    bin_quantiles:
+    - 0.125
+    - 0.25
+    - 0.375
+    - 0.5
+    - 0.625
+    - 0.75
+    - 0.875
     max_products: 128
     max_conjunctions: 128
     max_rff: 256
@@ -31,9 +38,12 @@ characterization:
     lambda_: 0.01
     gain_epsilon: 1.0e-12
     column_tolerance: 1.0e-12
-
-ridge_candidates: [0.0001, 0.001, 0.01, 0.1]
+ridge_candidates:
+- 0.0001
+- 0.001
+- 0.01
+- 0.1
 decision_owner: ebpfn-v1
-decision_date: "2026-07-06"
+decision_date: '2026-07-06'
 applicability_max_rows: 640
 applicability_max_features: 100

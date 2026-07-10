@@ -15,3 +15,4 @@ Code formatting must align with standards. Run `pixi run lint` and `pixi run pyt
 - Planning files may not be git tracked so comments should not reference specific sections of plans.
 - Do not automatically revert other active git changes from e.g. a user; ask before.
 - No overly complex code styles if a simpler implementation/flow suffices; while elegant/clean code is important, understandable and maintainable code takes priority.
+- Prefer f-strings to `("{}", value)` formatting

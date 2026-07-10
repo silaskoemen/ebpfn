@@ -2,7 +2,6 @@
 
 import dataclasses
 import json
-import logging
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -11,18 +10,19 @@ from typing import Any, SupportsFloat, cast
 
 import numpy as np
 import polars as pl
+from benchmarks.studies.study_logging import configure_study_logging
 from ebpfn.cache import EvaluationCache
 from ebpfn.config import TuningConfig, TuningStudyConfig
 from ebpfn.data import CharacterizationShape
 from ebpfn.priors import EtaVectorizer, HyperPrior, build_hyperprior, sample_task
 from ebpfn.tune import CandidateRecord, EvaluationResult, evaluate_candidate, make_panel, run_search
 from ebpfn.utils import RandomStreams, environment_provenance
+from loguru import logger
 
 _REPRESENTATIONS = ("raw", "contrast")
 _OBJECTIVES = ("directed", "energy")
 _SCENARIOS = ("null", "planted")
 _TABLE_NAMES = ("evaluations", "candidates", "failure_events", "rank_stability", "recovery")
-_LOG = logging.getLogger(__name__)
 
 
 def _float_metric(value: object) -> float:
@@ -468,26 +468,20 @@ def run_study(
     pending = [spec for spec in specs if not _part_complete(parts_dir, spec.cell_id)]
     completed = len(specs) - len(pending)
     if completed:
-        _LOG.info("resuming tuning study: %s/%s cells already complete", completed, len(specs))
+        logger.info(f"  resuming | {completed}/{len(specs)} cells already complete")
     if pending:
         workers = _worker_count(len(pending), max_workers)
-        _LOG.info("running %s tuning cells with %s worker(s)", len(pending), workers)
+        logger.info(f"  running | {len(pending)} tuning cells | {workers} worker(s)")
         if workers == 1:
             for spec in pending:
                 cell_id, rows, elapsed = _run_cell_spec(config, spec)
                 _write_part(parts_dir, cell_id, rows)
                 completed += 1
-                _LOG.info(
-                    "cell %s/%s | %s/%s/%s cloud=%s reg=%s repeat=%s | %.1fs",
-                    completed,
-                    len(specs),
-                    spec.representation,
-                    spec.objective,
-                    spec.scenario,
-                    spec.cloud_size,
-                    spec.regularization,
-                    spec.repeat,
-                    elapsed,
+                logger.info(
+                    f"  cell {completed}/{len(specs)} | "
+                    f"{spec.representation}/{spec.objective}/{spec.scenario} "
+                    f"cloud={spec.cloud_size} reg={spec.regularization} repeat={spec.repeat} | "
+                    f"{elapsed:.1f}s"
                 )
         else:
             with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -497,17 +491,11 @@ def run_study(
                     cell_id, rows, elapsed = future.result()
                     _write_part(parts_dir, cell_id, rows)
                     completed += 1
-                    _LOG.info(
-                        "cell %s/%s | %s/%s/%s cloud=%s reg=%s repeat=%s | %.1fs",
-                        completed,
-                        len(specs),
-                        spec.representation,
-                        spec.objective,
-                        spec.scenario,
-                        spec.cloud_size,
-                        spec.regularization,
-                        spec.repeat,
-                        elapsed,
+                    logger.info(
+                        f"  cell {completed}/{len(specs)} | "
+                        f"{spec.representation}/{spec.objective}/{spec.scenario} "
+                        f"cloud={spec.cloud_size} reg={spec.regularization} repeat={spec.repeat} | "
+                        f"{elapsed:.1f}s"
                     )
     frames = _read_parts(parts_dir, specs)
     return _finalize_study(config, frames)
@@ -529,21 +517,6 @@ def derive_study_status(config: TuningStudyConfig, checks: dict[str, bool]) -> t
     return ("frozen", []) if not pending else ("incomplete", pending)
 
 
-def _configure_logging(destination: Path) -> None:
-    _LOG.setLevel(logging.INFO)
-    for handler in list(_LOG.handlers):
-        _LOG.removeHandler(handler)
-        handler.close()
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    stream = logging.StreamHandler()
-    stream.setFormatter(formatter)
-    file_handler = logging.FileHandler(destination / "run.log")
-    file_handler.setFormatter(formatter)
-    _LOG.addHandler(stream)
-    _LOG.addHandler(file_handler)
-    _LOG.propagate = False
-
-
 def write_study_artifacts(
     config: TuningStudyConfig,
     project_root: Path,
@@ -552,7 +525,7 @@ def write_study_artifacts(
 ) -> dict[str, Any]:
     destination = output or (project_root / config.mode.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
-    _configure_logging(destination)
+    configure_study_logging(destination, study="tuning")
     result = run_study(config, parts_dir=destination / "parts")
     for name in ("evaluations", "candidates", "failure_events", "rank_stability", "recovery"):
         result[name].write_parquet(destination / f"{name}.parquet")

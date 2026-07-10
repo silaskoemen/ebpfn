@@ -82,23 +82,22 @@ class CharacterizationConfig(StrictConfigModel):
 
 class CharacterizationStudyModeConfig(StrictConfigModel):
     name: Literal["fast", "audit"]
-    output_dir: str
-    repeats: int
-    n_probe_fit: int
-    n_probe_score: int
-    n_features: int
 
     @model_validator(mode="after")
     def validate_values(self) -> "CharacterizationStudyModeConfig":
-        if not self.output_dir or self.repeats < 1:
-            raise ValueError("study output must be nonempty and repeats positive")
-        if min(self.n_probe_fit, self.n_probe_score) < 2 or self.n_features < 2:
-            raise ValueError("study partitions and feature count must be at least two")
+        if not self.name:
+            raise ValueError("study mode name must be nonempty")
         return self
 
 
 class CharacterizationStudyConfig(StrictConfigModel):
     mode: CharacterizationStudyModeConfig
+    dataset: str
+    output_root: str
+    repeats: int
+    max_rows: int
+    max_features: int
+    probe_score_fraction: float = 0.25
     characterization: CharacterizationConfig
     ridge_candidates: tuple[float, ...]
     decision_owner: str
@@ -113,8 +112,14 @@ class CharacterizationStudyConfig(StrictConfigModel):
 
     @model_validator(mode="after")
     def validate_values(self) -> "CharacterizationStudyConfig":
-        if not self.decision_owner or not self.decision_date:
-            raise ValueError("decision owner and date must be nonempty")
+        if not self.dataset or not self.output_root or not self.decision_owner or not self.decision_date:
+            raise ValueError("dataset, output root, and decision metadata must be nonempty")
+        if self.repeats < 1:
+            raise ValueError("study repeats must be positive")
+        if self.max_rows < 4 or self.max_features < 4:
+            raise ValueError("study row budget and feature count must both be at least four")
+        if not 0.0 < self.probe_score_fraction < 1.0:
+            raise ValueError("probe_score_fraction must be in (0, 1)")
         if self.applicability_max_rows < 2 or not 2 <= self.applicability_max_features <= 100:
             raise ValueError(
                 "study applicability bounds must cover at least two rows/features and at most 100 features"
@@ -124,3 +129,12 @@ class CharacterizationStudyConfig(StrictConfigModel):
         if tuple(sorted(set(self.ridge_candidates))) != self.ridge_candidates:
             raise ValueError("ridge candidates must be unique and increasing")
         return self
+
+    @property
+    def n_probe_score(self) -> int:
+        score_rows = round(self.max_rows * self.probe_score_fraction)
+        return min(max(score_rows, 2), self.max_rows - 2)
+
+    @property
+    def n_probe_fit(self) -> int:
+        return self.max_rows - self.n_probe_score

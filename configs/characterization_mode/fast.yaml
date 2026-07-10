@@ -1,8 +1,7 @@
-# @package mode
+# @package _global_
 
-name: fast
-output_dir: benchmarks/results/characterization/fast
+mode:
+  name: fast
 repeats: 1
-n_probe_fit: 192
-n_probe_score: 64
-n_features: 6
+max_rows: 256
+max_features: 12

@@ -4,13 +4,19 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from benchmarks.studies import characterization
 from benchmarks.studies.characterization import (
+    _CheckpointStore,
     _load_or_compute_rows,
     _measure,
+    _RegressionDataset,
+    characterization_output_dir,
     derive_study_status,
+    make_task,
     write_study_artifacts,
 )
 from ebpfn.config import CharacterizationStudyConfig
+from ebpfn.data import FeatureSchema
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
@@ -23,7 +29,7 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
     resolved = OmegaConf.to_container(raw, resolve=True)
     assert isinstance(resolved, dict)
     config = CharacterizationStudyConfig.model_validate(resolved)
-    output = tmp_path / "artifacts" if mode == "fast" else Path(config.mode.output_dir)
+    output = tmp_path / "artifacts"
     decision = write_study_artifacts(config, Path.cwd(), output=output)
     evidence = json.loads((output / "evidence.json").read_text())
     assert decision["status"] == ("provisional" if mode == "fast" else "incomplete")
@@ -32,6 +38,7 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
     assert evidence["lambda_scores"]
     assert evidence["policy_summary"]
     coordinates = pl.read_parquet(output / "coordinates.parquet")
+    assert set(coordinates["dataset"].unique()) == {config.dataset}
     assert set(coordinates["representation"].unique()) == {"raw", "contrast", "diagnostic"}
     assert (coordinates["tracemalloc_peak_bytes"] > 0).all()
     assert (coordinates["process_peak_rss_growth_bytes"] >= 0).all()
@@ -41,18 +48,78 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
     assert evidence["observation_summary"]
     assert evidence["structure_diagnostics"]["block_summary"]
     assert evidence["structure_diagnostics"]["coordinate_redundancy"]
+    summary = (output / "summary.md").read_text()
+    assert "## Headline" in summary
+    assert "## Dataset Fingerprint" in summary
+    assert "### Strongest Coordinates" in summary
+    assert "### Row Policy Sweep" in summary
     expected = {
+        "checkpoints.sqlite",
         "config.json",
         "coordinates.parquet",
         "decision_log.json",
         "environment.json",
         "evidence.json",
-        "parts",
         "run.log",
         "schema_contrast.json",
         "schema_raw.json",
+        "summary.md",
     }
     assert {path.name for path in output.iterdir()} == expected
+
+
+def test_default_output_directory_is_slugged_and_hashed(tmp_path):
+    config_dir = (Path(__file__).parents[2] / "configs").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        raw = compose(config_name="characterization", overrides=["dataset=synthetic_sparse_linear", "max_rows=128"])
+    resolved = OmegaConf.to_container(raw, resolve=True)
+    assert isinstance(resolved, dict)
+    config = CharacterizationStudyConfig.model_validate(resolved)
+
+    output = characterization_output_dir(config, tmp_path)
+
+    assert output.parent == tmp_path / config.output_root
+    assert output.name.startswith(
+        "dataset_synthetic_sparse_linear__mode_fast__rows_128__features_6__repeats_1__seed_0__"
+    )
+    assert "=" not in output.name
+    assert len(output.name.rsplit("__", maxsplit=1)[1]) == 8
+
+
+def test_real_dataset_task_uses_named_registry_and_flat_size_knobs(monkeypatch):
+    n = 80
+    frame = pl.DataFrame(
+        {
+            "x0": np.linspace(-1.0, 1.0, n),
+            "x1": np.arange(n) % 2,
+            "x2": np.sin(np.arange(n)),
+            "x3": np.cos(np.arange(n)),
+            "x4": np.arange(n),
+            "category": ["a", "b"] * (n // 2),
+        }
+    )
+    y = frame["x0"].to_numpy() ** 2 + frame["x2"].to_numpy()
+    schema = FeatureSchema(
+        ("x0", "x1", "x2", "x3", "x4", "category"),
+        ("numeric", "binary", "numeric", "numeric", "numeric", "categorical"),
+    )
+    dataset = _RegressionDataset("unit-source", "y", frame, y, schema)
+    monkeypatch.setattr(characterization, "_openml_spec", lambda name: object() if name == "concrete" else None)
+    monkeypatch.setattr(characterization, "_load_openml_regression_dataset", lambda name: dataset)
+
+    config_dir = (Path(__file__).parents[2] / "configs").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        raw = compose(config_name="characterization", overrides=["dataset=concrete", "max_rows=40", "max_features=4"])
+    resolved = OmegaConf.to_container(raw, resolve=True)
+    assert isinstance(resolved, dict)
+    config = CharacterizationStudyConfig.model_validate(resolved)
+
+    task = make_task("real", config, 0)
+
+    assert task.source_id == "unit-source"
+    assert task.probe_fit.X.height + task.probe_score.X.height == 40
+    assert task.schema.names == ("x0", "x1", "x2", "x3")
+    assert task.schema.kinds == ("numeric", "binary", "numeric", "numeric")
 
 
 def test_process_rss_growth_reflects_the_call_not_the_whole_process_watermark():
@@ -69,21 +136,22 @@ def test_process_rss_growth_reflects_the_call_not_the_whole_process_watermark():
     assert tiny_growth < large_growth
 
 
-def test_checkpoint_rows_skip_existing_parts(tmp_path):
+def test_checkpoint_rows_skip_existing_units(tmp_path):
     calls = {"n": 0}
+    checkpoints = _CheckpointStore(tmp_path / "checkpoints.sqlite")
 
     def compute():
         calls["n"] += 1
         return [{"unit": "a", "value": 1.0}]
 
     first = _load_or_compute_rows(
-        parts_dir=tmp_path,
+        checkpoints=checkpoints,
         unit_id="section/a",
         description="section a",
         compute=compute,
     )
     second = _load_or_compute_rows(
-        parts_dir=tmp_path,
+        checkpoints=checkpoints,
         unit_id="section/a",
         description="section a",
         compute=compute,
@@ -91,6 +159,7 @@ def test_checkpoint_rows_skip_existing_parts(tmp_path):
 
     assert calls["n"] == 1
     assert first == second == [{"unit": "a", "value": 1.0}]
+    assert (tmp_path / "checkpoints.sqlite").exists()
 
 
 def test_audit_status_is_derived_from_evidence():
