@@ -9,18 +9,18 @@ same task and diagnostics.
 from typing import Any
 
 from ebpfn.config.prior import HyperPriorConfig
-from ebpfn.data import CharacterizationShape
-from ebpfn.data import content_hash
-from ebpfn.priors.contracts import ROUTE_ORDER
-from ebpfn.priors.contracts import BnnHyperPrior
-from ebpfn.priors.contracts import CompositionalHyperPrior
-from ebpfn.priors.contracts import GeneratedTask
-from ebpfn.priors.contracts import HyperPrior
-from ebpfn.priors.contracts import ScmHyperPrior
-from ebpfn.priors.contracts import TreeHyperPrior
+from ebpfn.data import CharacterizationShape, content_hash
+from ebpfn.priors.contracts import (
+    ROUTE_ORDER,
+    BnnHyperPrior,
+    CompositionalHyperPrior,
+    GeneratedTask,
+    HyperPrior,
+    ScmHyperPrior,
+    TreeHyperPrior,
+)
 from ebpfn.priors.mixture import sample_task as _mixture_sample_task
-from ebpfn.utils import RandomRole
-from ebpfn.utils import RandomStreams
+from ebpfn.utils import RandomRole, RandomStreams
 
 
 def build_hyperprior(config: HyperPriorConfig) -> HyperPrior:

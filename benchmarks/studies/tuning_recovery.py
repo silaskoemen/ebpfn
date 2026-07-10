@@ -2,34 +2,27 @@
 
 import dataclasses
 import json
+import logging
+import os
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
-from typing import SupportsFloat
-from typing import cast
+from typing import Any, SupportsFloat, cast
 
 import numpy as np
 import polars as pl
 from ebpfn.cache import EvaluationCache
-from ebpfn.config import TuningConfig
-from ebpfn.config import TuningStudyConfig
+from ebpfn.config import TuningConfig, TuningStudyConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import EtaVectorizer
-from ebpfn.priors import HyperPrior
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_task
-from ebpfn.tune import CandidateRecord
-from ebpfn.tune import EvaluationResult
-from ebpfn.tune import RealTarget
-from ebpfn.tune import characterize_task
-from ebpfn.tune import evaluate_candidate
-from ebpfn.tune import make_panel
-from ebpfn.tune import run_search
-from ebpfn.utils import RandomStreams
-from ebpfn.utils import environment_provenance
+from ebpfn.priors import EtaVectorizer, HyperPrior, build_hyperprior, sample_task
+from ebpfn.tune import CandidateRecord, EvaluationResult, evaluate_candidate, make_panel, run_search
+from ebpfn.utils import RandomStreams, environment_provenance
 
 _REPRESENTATIONS = ("raw", "contrast")
 _OBJECTIVES = ("directed", "energy")
 _SCENARIOS = ("null", "planted")
+_TABLE_NAMES = ("evaluations", "candidates", "failure_events", "rank_stability", "recovery")
+_LOG = logging.getLogger(__name__)
 
 
 def _float_metric(value: object) -> float:
@@ -169,6 +162,85 @@ class _StudyRows:
     recovery: list[dict[str, Any]] = dataclasses.field(default_factory=list)
 
 
+@dataclasses.dataclass(frozen=True)
+class _CellSpec:
+    cell_id: int
+    representation: str
+    objective: str
+    scenario: str
+    repeat: int
+    cloud_size: int
+    regularization: str
+
+
+def _extend_rows(target: _StudyRows, source: _StudyRows) -> None:
+    target.evaluations.extend(source.evaluations)
+    target.candidates.extend(source.candidates)
+    target.failures.extend(source.failures)
+    target.ranks.extend(source.ranks)
+    target.recovery.extend(source.recovery)
+
+
+def _rows_to_frames(rows: _StudyRows) -> dict[str, pl.DataFrame]:
+    return {
+        "evaluations": pl.DataFrame(rows.evaluations),
+        "candidates": pl.DataFrame(rows.candidates),
+        "failure_events": pl.DataFrame(rows.failures) if rows.failures else _empty_failures(),
+        "rank_stability": pl.DataFrame(rows.ranks),
+        "recovery": pl.DataFrame(rows.recovery),
+    }
+
+
+def _cell_part_dir(parts_dir: Path, cell_id: int) -> Path:
+    return parts_dir / f"cell_{cell_id:04d}"
+
+
+def _part_complete(parts_dir: Path, cell_id: int) -> bool:
+    part = _cell_part_dir(parts_dir, cell_id)
+    return (part / "complete.json").exists() and all((part / f"{name}.parquet").exists() for name in _TABLE_NAMES)
+
+
+def _write_part(parts_dir: Path, cell_id: int, rows: _StudyRows) -> None:
+    part = _cell_part_dir(parts_dir, cell_id)
+    part.mkdir(parents=True, exist_ok=True)
+    for name, frame in _rows_to_frames(rows).items():
+        frame.write_parquet(part / f"{name}.parquet")
+    (part / "complete.json").write_text(json.dumps({"cell_id": cell_id}, sort_keys=True))
+
+
+def _read_parts(parts_dir: Path, specs: list[_CellSpec]) -> dict[str, pl.DataFrame]:
+    frames: dict[str, list[pl.DataFrame]] = {name: [] for name in _TABLE_NAMES}
+    for spec in specs:
+        part = _cell_part_dir(parts_dir, spec.cell_id)
+        for name in _TABLE_NAMES:
+            frames[name].append(pl.read_parquet(part / f"{name}.parquet"))
+    return {
+        name: pl.concat(parts, how="diagonal_relaxed") if parts else pl.DataFrame() for name, parts in frames.items()
+    }
+
+
+def _cell_specs(config: TuningStudyConfig) -> list[_CellSpec]:
+    specs: list[_CellSpec] = []
+    for representation in _REPRESENTATIONS:
+        for objective in _OBJECTIVES:
+            for scenario in _SCENARIOS:
+                for cloud_size in config.mode.cloud_sizes:
+                    for regularization in config.mode.regularization_policies:
+                        for repeat in range(config.mode.repeats):
+                            specs.append(
+                                _CellSpec(
+                                    len(specs),
+                                    representation,
+                                    objective,
+                                    scenario,
+                                    repeat,
+                                    cloud_size,
+                                    regularization,
+                                )
+                            )
+    return specs
+
+
 def _run_cell(
     config: TuningStudyConfig,
     tuning: TuningConfig,
@@ -176,8 +248,10 @@ def _run_cell(
     vectorizer: EtaVectorizer,
     planted_vector: np.ndarray,
     cell: dict[str, Any],
-    rows: _StudyRows,
-) -> None:
+    rows: _StudyRows | None = None,
+) -> _StudyRows:
+    if rows is None:
+        rows = _StudyRows()
     baseline_eta = build_hyperprior(tuning.prior)
     baseline_vector = tuple(float(value) for value in vectorizer.encode(baseline_eta))
     baseline_key = _vector_key(baseline_vector)
@@ -212,7 +286,7 @@ def _run_cell(
         )
         rows.failures.extend(_failure_rows(record.result, cell, "selection"))
 
-    targets = [RealTarget(task, characterize_task(task, tuning.characterization, "full")) for task in real_tasks]
+    targets = list(search.real_targets_by_fidelity["full"])
     audit_panel = make_panel("final_audit", repeat, tuning, streams)
     cache = EvaluationCache(tuning.cache.root, tuning.cache.enabled) if tuning.cache.enabled else None
     audit_records: list[CandidateRecord] = []
@@ -285,46 +359,53 @@ def _run_cell(
                 "origin": record.origin,
             }
         )
+    return rows
 
 
-def run_study(config: TuningStudyConfig) -> dict[str, Any]:
-    """Run all four construction cells under planted and null recovery."""
-    rows = _StudyRows()
+def _run_cell_spec(config: TuningStudyConfig, spec: _CellSpec) -> tuple[int, _StudyRows, float]:
+    start = time.perf_counter()
+    planted_eta = _planted_eta(config, spec.scenario)
+    tuning = _cell_config(config, spec.representation, spec.objective, spec.cloud_size, spec.regularization)
+    baseline_eta = build_hyperprior(tuning.prior)
+    vectorizer = EtaVectorizer(baseline_eta, tuning.active)
+    planted_vector = np.asarray(vectorizer.encode(planted_eta))
+    cell = {
+        "representation": spec.representation,
+        "objective": spec.objective,
+        "scenario": spec.scenario,
+        "repeat": spec.repeat,
+        "cloud_size": spec.cloud_size,
+        "regularization": spec.regularization,
+    }
+    return (
+        spec.cell_id,
+        _run_cell(config, tuning, planted_eta, vectorizer, planted_vector, cell),
+        time.perf_counter() - start,
+    )
 
-    for representation in _REPRESENTATIONS:
-        for objective in _OBJECTIVES:
-            for scenario in _SCENARIOS:
-                planted_eta = _planted_eta(config, scenario)
-                for cloud_size in config.mode.cloud_sizes:
-                    for regularization in config.mode.regularization_policies:
-                        tuning = _cell_config(config, representation, objective, cloud_size, regularization)
-                        baseline_eta = build_hyperprior(tuning.prior)
-                        vectorizer = EtaVectorizer(baseline_eta, tuning.active)
-                        planted_vector = np.asarray(vectorizer.encode(planted_eta))
-                        for repeat in range(config.mode.repeats):
-                            cell = {
-                                "representation": representation,
-                                "objective": objective,
-                                "scenario": scenario,
-                                "repeat": repeat,
-                                "cloud_size": cloud_size,
-                                "regularization": regularization,
-                            }
-                            _run_cell(
-                                config,
-                                tuning,
-                                planted_eta,
-                                vectorizer,
-                                planted_vector,
-                                cell,
-                                rows,
-                            )
 
-    evaluations = pl.DataFrame(rows.evaluations)
-    candidates = pl.DataFrame(rows.candidates)
-    failures = pl.DataFrame(rows.failures) if rows.failures else _empty_failures()
-    ranks = pl.DataFrame(rows.ranks)
-    recovery = pl.DataFrame(rows.recovery)
+def _worker_count(total: int, requested: int | None) -> int:
+    if total <= 1:
+        return 1
+    if requested is not None:
+        if requested < 1:
+            raise ValueError("max_workers must be positive")
+        return min(requested, total)
+    configured = os.environ.get("EBPFN_TUNING_WORKERS")
+    if configured is not None:
+        workers = int(configured)
+        if workers < 1:
+            raise ValueError("EBPFN_TUNING_WORKERS must be positive")
+        return min(workers, total)
+    return min(os.cpu_count() or 1, total)
+
+
+def _finalize_study(config: TuningStudyConfig, frames: dict[str, pl.DataFrame]) -> dict[str, Any]:
+    evaluations = frames["evaluations"]
+    candidates = frames["candidates"]
+    failures = frames["failure_events"]
+    ranks = frames["rank_stability"]
+    recovery = frames["recovery"]
     combinations = set(zip(evaluations["representation"], evaluations["objective"], strict=True))
     scenarios = set(evaluations["scenario"])
     cloud_sizes = set(evaluations["cloud_size"])
@@ -368,6 +449,70 @@ def run_study(config: TuningStudyConfig) -> dict[str, Any]:
     }
 
 
+def run_study(
+    config: TuningStudyConfig,
+    *,
+    parts_dir: Path | None = None,
+    max_workers: int | None = None,
+) -> dict[str, Any]:
+    """Run all four construction cells under planted and null recovery."""
+    specs = _cell_specs(config)
+    if parts_dir is None:
+        rows = _StudyRows()
+        for spec in specs:
+            _, cell_rows, _ = _run_cell_spec(config, spec)
+            _extend_rows(rows, cell_rows)
+        return _finalize_study(config, _rows_to_frames(rows))
+
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    pending = [spec for spec in specs if not _part_complete(parts_dir, spec.cell_id)]
+    completed = len(specs) - len(pending)
+    if completed:
+        _LOG.info("resuming tuning study: %s/%s cells already complete", completed, len(specs))
+    if pending:
+        workers = _worker_count(len(pending), max_workers)
+        _LOG.info("running %s tuning cells with %s worker(s)", len(pending), workers)
+        if workers == 1:
+            for spec in pending:
+                cell_id, rows, elapsed = _run_cell_spec(config, spec)
+                _write_part(parts_dir, cell_id, rows)
+                completed += 1
+                _LOG.info(
+                    "cell %s/%s | %s/%s/%s cloud=%s reg=%s repeat=%s | %.1fs",
+                    completed,
+                    len(specs),
+                    spec.representation,
+                    spec.objective,
+                    spec.scenario,
+                    spec.cloud_size,
+                    spec.regularization,
+                    spec.repeat,
+                    elapsed,
+                )
+        else:
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                futures = {executor.submit(_run_cell_spec, config, spec): spec for spec in pending}
+                for future in as_completed(futures):
+                    spec = futures[future]
+                    cell_id, rows, elapsed = future.result()
+                    _write_part(parts_dir, cell_id, rows)
+                    completed += 1
+                    _LOG.info(
+                        "cell %s/%s | %s/%s/%s cloud=%s reg=%s repeat=%s | %.1fs",
+                        completed,
+                        len(specs),
+                        spec.representation,
+                        spec.objective,
+                        spec.scenario,
+                        spec.cloud_size,
+                        spec.regularization,
+                        spec.repeat,
+                        elapsed,
+                    )
+    frames = _read_parts(parts_dir, specs)
+    return _finalize_study(config, frames)
+
+
 def derive_study_status(config: TuningStudyConfig, checks: dict[str, bool]) -> tuple[str, list[str]]:
     failed = sorted(name for name, passed in checks.items() if not passed)
     if failed:
@@ -384,6 +529,21 @@ def derive_study_status(config: TuningStudyConfig, checks: dict[str, bool]) -> t
     return ("frozen", []) if not pending else ("incomplete", pending)
 
 
+def _configure_logging(destination: Path) -> None:
+    _LOG.setLevel(logging.INFO)
+    for handler in list(_LOG.handlers):
+        _LOG.removeHandler(handler)
+        handler.close()
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    stream = logging.StreamHandler()
+    stream.setFormatter(formatter)
+    file_handler = logging.FileHandler(destination / "run.log")
+    file_handler.setFormatter(formatter)
+    _LOG.addHandler(stream)
+    _LOG.addHandler(file_handler)
+    _LOG.propagate = False
+
+
 def write_study_artifacts(
     config: TuningStudyConfig,
     project_root: Path,
@@ -392,7 +552,8 @@ def write_study_artifacts(
 ) -> dict[str, Any]:
     destination = output or (project_root / config.mode.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
-    result = run_study(config)
+    _configure_logging(destination)
+    result = run_study(config, parts_dir=destination / "parts")
     for name in ("evaluations", "candidates", "failure_events", "rank_stability", "recovery"):
         result[name].write_parquet(destination / f"{name}.parquet")
     (destination / "config.json").write_text(json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True))

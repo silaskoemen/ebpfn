@@ -6,8 +6,7 @@ carry PFN settings: candidate evaluation is likelihood-free by construction.
 
 from typing import Literal
 
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 
 from ebpfn.config.base import StrictConfigModel
 from ebpfn.config.characterization import CharacterizationConfig
@@ -119,7 +118,7 @@ class CacheConfig(StrictConfigModel):
 
     enabled: bool = True
     root: str = ".cache/tuning"
-    cache_version: str = "tuning-cache-2"
+    cache_version: str = "tuning-cache-3"
 
     @model_validator(mode="after")
     def validate_values(self) -> "CacheConfig":

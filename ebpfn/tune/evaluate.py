@@ -8,36 +8,28 @@ aggregated inside the objective; tasks and sources are aggregated here by the
 objective's explicit-weight rule.
 """
 
+import dataclasses
 import math
 import time
 from collections.abc import Sequence
 
 import numpy as np
 
-from ebpfn.cache import EvaluationCache
-from ebpfn.cache import evaluation_cache_key
-from ebpfn.characterize import BudgetCharacterizationError
-from ebpfn.characterize import TaskCharacterization
-from ebpfn.characterize import build_row_budget_manifests
-from ebpfn.characterize import characterize
-from ebpfn.characterize import characterize_multiresolution
-from ebpfn.compare import directed_coverage
-from ebpfn.compare import energy_score
-from ebpfn.compare import validity_report
-from ebpfn.config import CharacterizationConfig
-from ebpfn.config import TuningConfig
-from ebpfn.data import TuningTask
-from ebpfn.data import characterization_shape
-from ebpfn.priors import EtaVectorizer
-from ebpfn.priors import GeneratedTask
-from ebpfn.priors import HyperPrior
-from ebpfn.priors import sample_task
+from ebpfn.cache import EvaluationCache, evaluation_cache_key
+from ebpfn.characterize import (
+    BudgetCharacterizationError,
+    TaskCharacterization,
+    build_row_budget_manifests,
+    characterize,
+    characterize_multiresolution,
+)
+from ebpfn.compare import directed_coverage, energy_score, validity_report
+from ebpfn.config import CharacterizationConfig, TuningConfig
+from ebpfn.data import TuningTask, characterization_shape
+from ebpfn.priors import EtaVectorizer, GeneratedTask, HyperPrior, sample_task
 from ebpfn.utils import RandomStreams
 
-from .contracts import EvaluationResult
-from .contracts import FailureEvent
-from .contracts import Panel
-from .contracts import RealTarget
+from .contracts import EvaluationResult, FailureEvent, Panel, RealTarget
 
 # Soft penalty scale for the optional D3 trust-region regularization.
 _TRUST_REGION_PENALTY = 1.0e3
@@ -219,7 +211,10 @@ def evaluate_candidate(
     if cache is not None:
         hit = cache.get(key)
         if hit is not None:
-            return EvaluationResult.from_payload(hit)
+            result = EvaluationResult.from_payload(hit)
+            vector = result.candidate_vector
+            n_tasks = int(result.objective_terms["n_tasks"])
+            return _regularized_result(result, config, vector, baseline_vector, n_tasks)
 
     vector = tuple(float(value) for value in vectorizer.encode(eta)) if vectorizer is not None else ()
     start = time.perf_counter()
@@ -265,9 +260,8 @@ def evaluate_candidate(
         blocks_by_source.setdefault(source, []).append(dict(per_block))
 
     n_tasks = len(targets)
-    total = _aggregate_hierarchical(config.objective, by_source)
+    raw_total = _aggregate_hierarchical(config.objective, by_source)
     per_block = _aggregate_blocks(config.objective, blocks_by_source)
-    total = _apply_regularization(total, config, vector, baseline_vector, n_tasks)
 
     objective_terms: dict[str, object] = {
         "objective": config.objective,
@@ -281,7 +275,7 @@ def evaluate_candidate(
         objective_terms["energy_pair_ids"] = [[int(i), int(j)] for i, j in pair_ids] if pair_ids is not None else None
 
     result = EvaluationResult(
-        total=total,
+        total=raw_total,
         per_block=per_block,
         objective_terms=objective_terms,
         failures=len(failure_events),
@@ -296,7 +290,20 @@ def evaluate_candidate(
     )
     if cache is not None:
         cache.put(key, result.to_payload())
-    return result
+    return _regularized_result(result, config, vector, baseline_vector, n_tasks)
+
+
+def _regularized_result(
+    result: EvaluationResult,
+    config: TuningConfig,
+    vector: tuple[float, ...],
+    baseline_vector: tuple[float, ...] | None,
+    n_tasks: int,
+) -> EvaluationResult:
+    total = _apply_regularization(result.total, config, vector, baseline_vector, n_tasks)
+    if total == result.total:
+        return result
+    return dataclasses.replace(result, total=total)
 
 
 def _apply_regularization(

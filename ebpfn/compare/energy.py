@@ -19,10 +19,7 @@ import numpy as np
 from ebpfn.characterize import TaskCharacterization
 from ebpfn.config import CompareConfig
 
-from .blocks import assert_comparable
-from .blocks import budget_weights
-from .blocks import group_by_budget_block
-from .blocks import validity_report
+from .blocks import assert_comparable, budget_weights, group_by_budget_block, validity_report
 from .contracts import EnergyScoreResult
 
 

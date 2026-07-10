@@ -8,9 +8,7 @@ the `TuningTask` the characterizer sees.
 """
 
 from dataclasses import dataclass
-from typing import Any
-from typing import Literal
-from typing import TypeAlias
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 

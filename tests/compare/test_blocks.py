@@ -1,20 +1,18 @@
 import numpy as np
 import pytest
 from ebpfn.characterize import characterize_multiresolution
-from ebpfn.compare import assert_comparable
-from ebpfn.compare import block_distance
-from ebpfn.compare import budget_weights
-from ebpfn.compare import directed_coverage
-from ebpfn.compare import energy_score
-from ebpfn.compare import group_by_budget_block
-from ebpfn.compare import validity_report
-from ebpfn.config import CharacterizationConfig
-from ebpfn.config import CompareConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.data import CharacterizationShape
-from ebpfn.data import characterization_shape
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
+from ebpfn.compare import (
+    assert_comparable,
+    block_distance,
+    budget_weights,
+    directed_coverage,
+    energy_score,
+    group_by_budget_block,
+    validity_report,
+)
+from ebpfn.config import CharacterizationConfig, CompareConfig, HyperPriorConfig
+from ebpfn.data import CharacterizationShape, characterization_shape
+from ebpfn.priors import build_hyperprior, sample_cloud
 from ebpfn.utils import RandomStreams
 
 

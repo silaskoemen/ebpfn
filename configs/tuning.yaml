@@ -32,7 +32,7 @@ tuning:
   cache:
     enabled: true
     root: .cache/tuning-step4
-    cache_version: tuning-cache-2
+    cache_version: tuning-cache-3
 
 planted_log_snr_shift: 0.8
 trust_region_radius: 0.5

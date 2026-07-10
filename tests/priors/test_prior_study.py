@@ -1,10 +1,7 @@
 import json
 
-from benchmarks.studies.prior_audit import derive_study_status
-from benchmarks.studies.prior_audit import write_study_artifacts
-from ebpfn.config import HyperPriorConfig
-from ebpfn.config import PriorStudyConfig
-from ebpfn.config import PriorStudyModeConfig
+from benchmarks.studies.prior_audit import derive_study_status, write_study_artifacts
+from ebpfn.config import HyperPriorConfig, PriorStudyConfig, PriorStudyModeConfig
 
 
 def _config(name: str, output_dir: str) -> PriorStudyConfig:

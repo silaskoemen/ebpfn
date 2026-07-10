@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
 from ebpfn.config import HyperPriorConfig
-from ebpfn.priors import DEFAULT_ACTIVE
-from ebpfn.priors import EtaVectorizer
-from ebpfn.priors import build_hyperprior
+from ebpfn.priors import DEFAULT_ACTIVE, EtaVectorizer, build_hyperprior
 
 
 def _vectorizer() -> EtaVectorizer:

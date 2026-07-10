@@ -3,13 +3,9 @@ import math
 import pytest
 from ebpfn.characterize import characterize_multiresolution
 from ebpfn.compare import directed_coverage
-from ebpfn.config import CharacterizationConfig
-from ebpfn.config import CompareConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.data import CharacterizationShape
-from ebpfn.data import characterization_shape
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
+from ebpfn.config import CharacterizationConfig, CompareConfig, HyperPriorConfig
+from ebpfn.data import CharacterizationShape, characterization_shape
+from ebpfn.priors import build_hyperprior, sample_cloud
 from ebpfn.utils import RandomStreams
 
 

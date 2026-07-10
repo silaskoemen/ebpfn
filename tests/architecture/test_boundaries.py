@@ -2,8 +2,7 @@ import ast
 from pathlib import Path
 
 from ebpfn.config import CharacterizationStudyConfig
-from hydra import compose
-from hydra import initialize_config_dir
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 

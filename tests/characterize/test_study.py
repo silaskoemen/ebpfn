@@ -4,12 +4,14 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-from benchmarks.studies.characterization import _measure
-from benchmarks.studies.characterization import derive_study_status
-from benchmarks.studies.characterization import write_study_artifacts
+from benchmarks.studies.characterization import (
+    _load_or_compute_rows,
+    _measure,
+    derive_study_status,
+    write_study_artifacts,
+)
 from ebpfn.config import CharacterizationStudyConfig
-from hydra import compose
-from hydra import initialize_config_dir
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 
@@ -36,6 +38,7 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
     assert evidence["coordinate_stability"]
     assert evidence["rank_stability"]
     assert evidence["response_summary"]
+    assert evidence["observation_summary"]
     assert evidence["structure_diagnostics"]["block_summary"]
     assert evidence["structure_diagnostics"]["coordinate_redundancy"]
     expected = {
@@ -44,6 +47,8 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
         "decision_log.json",
         "environment.json",
         "evidence.json",
+        "parts",
+        "run.log",
         "schema_contrast.json",
         "schema_raw.json",
     }
@@ -62,6 +67,30 @@ def test_process_rss_growth_reflects_the_call_not_the_whole_process_watermark():
     assert large_growth >= 0
     assert tiny_growth >= 0
     assert tiny_growth < large_growth
+
+
+def test_checkpoint_rows_skip_existing_parts(tmp_path):
+    calls = {"n": 0}
+
+    def compute():
+        calls["n"] += 1
+        return [{"unit": "a", "value": 1.0}]
+
+    first = _load_or_compute_rows(
+        parts_dir=tmp_path,
+        unit_id="section/a",
+        description="section a",
+        compute=compute,
+    )
+    second = _load_or_compute_rows(
+        parts_dir=tmp_path,
+        unit_id="section/a",
+        description="section a",
+        compute=compute,
+    )
+
+    assert calls["n"] == 1
+    assert first == second == [{"unit": "a", "value": 1.0}]
 
 
 def test_audit_status_is_derived_from_evidence():

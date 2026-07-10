@@ -5,11 +5,7 @@ import numpy as np
 import pytest
 from ebpfn.config import HyperPriorConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import ROUTE_ORDER
-from ebpfn.priors import HyperPrior
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
-from ebpfn.priors import sample_task
+from ebpfn.priors import ROUTE_ORDER, HyperPrior, build_hyperprior, sample_cloud, sample_task
 from ebpfn.utils import RandomStreams
 
 

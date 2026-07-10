@@ -8,8 +8,7 @@ numbers across candidates within a panel.
 
 from ebpfn.compare import sample_energy_pairs
 from ebpfn.config import TuningConfig
-from ebpfn.utils import RandomRole
-from ebpfn.utils import RandomStreams
+from ebpfn.utils import RandomRole, RandomStreams
 
 from .contracts import Panel
 

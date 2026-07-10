@@ -8,13 +8,12 @@ Environment, package, platform, and Git versions are provenance, not key inputs.
 from collections.abc import Sequence
 
 from ebpfn.config import TuningConfig
-from ebpfn.data import TuningTask
-from ebpfn.data import content_hash
+from ebpfn.data import TuningTask, content_hash
 from ebpfn.priors import HyperPrior
 
 # Manual namespace/version for the whole cache identity scheme. Bump to
 # invalidate every cached evaluation regardless of config contents.
-CACHE_VERSION = "tuning-cache-2"
+CACHE_VERSION = "tuning-cache-3"
 
 
 def evaluation_cache_key(
@@ -38,12 +37,24 @@ def evaluation_cache_key(
         config.characterization.representation,
         config.compare.version,
     )
+    key_config = config.model_copy(
+        update={
+            "search": config.search.model_copy(
+                update={
+                    "single_task_regularization": "none",
+                    "trust_region_radius": None,
+                    "competitive_tolerance": None,
+                }
+            )
+        }
+    )
     payload = (
         CACHE_VERSION,
         config.cache.cache_version,
         # Resolved run state minus the storage-only cache subconfig: the store
-        # location and enabled flag are provenance, not evaluation identity.
-        config.model_dump(mode="json", exclude={"cache"}),
+        # location/enabled flag and post-hoc single-task regularization are not
+        # raw simulator evaluation identity.
+        key_config.model_dump(mode="json", exclude={"cache"}),
         schema_versions,
         # Full tuning contents and split manifests (a TuningTask structurally
         # excludes any final-test partition), so changed data changes the key.

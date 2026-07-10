@@ -6,8 +6,7 @@ import math
 import numpy as np
 
 from ebpfn.config import CharacterizationConfig
-from ebpfn.data import TuningTask
-from ebpfn.data import content_hash
+from ebpfn.data import TuningTask, content_hash
 
 from .contracts import RowBudgetManifest
 

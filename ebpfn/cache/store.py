@@ -6,8 +6,10 @@ dependency leaf below ``ebpfn.tune`` (which owns result (de)serialization). Cros
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 
 class EvaluationCache:
@@ -35,6 +37,6 @@ class EvaluationCache:
             return
         self.root.mkdir(parents=True, exist_ok=True)
         path = self._path(key)
-        tmp = path.with_suffix(".json.tmp")
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
         tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
         tmp.replace(path)

@@ -9,11 +9,8 @@ scaled and every assembled node is z-scored so depth does not blow up scale.
 
 import numpy as np
 
-from ebpfn.priors.contracts import RouteRealization
-from ebpfn.priors.contracts import ScmHyperPrior
-from ebpfn.priors.contracts import SharedTheta
-from ebpfn.priors.features import activation
-from ebpfn.priors.features import zscore
+from ebpfn.priors.contracts import RouteRealization, ScmHyperPrior, SharedTheta
+from ebpfn.priors.features import activation, zscore
 
 
 def _parents(m: int, target_indegree: float, max_parents: int, rng: np.random.Generator) -> list[np.ndarray]:

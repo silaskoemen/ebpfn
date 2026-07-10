@@ -9,14 +9,11 @@ quantities use log transforms, other bounded scalars affine transforms.
 """
 
 import dataclasses
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 
-from ebpfn.priors.contracts import REFERENCE_ROUTE
-from ebpfn.priors.contracts import ROUTE_ORDER
-from ebpfn.priors.contracts import HyperPrior
+from ebpfn.priors.contracts import REFERENCE_ROUTE, ROUTE_ORDER, HyperPrior
 
 _TOL = 1e-9
 _VERSION = "eta-vectorizer-1"

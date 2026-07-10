@@ -4,22 +4,19 @@ from itertools import pairwise
 import numpy as np
 import polars as pl
 import pytest
-from ebpfn.characterize import CharacterizationSchema
-from ebpfn.characterize import Coordinate
-from ebpfn.characterize import build_feature_maps
-from ebpfn.characterize import build_row_budget_manifests
-from ebpfn.characterize import characterize
-from ebpfn.characterize import characterize_multiresolution
-from ebpfn.characterize import fit_ridge_probe
-from ebpfn.characterize import solve_ridge_coefficients
-from ebpfn.characterize import target_functionals
-from ebpfn.config import CharacterizationConfig
-from ebpfn.config import MapConfig
-from ebpfn.config import RidgeConfig
-from ebpfn.config import RowBudgetConfig
-from ebpfn.data import FeatureSchema
-from ebpfn.data import TaskPartition
-from ebpfn.data import TuningTask
+from ebpfn.characterize import (
+    CharacterizationSchema,
+    Coordinate,
+    build_feature_maps,
+    build_row_budget_manifests,
+    characterize,
+    characterize_multiresolution,
+    fit_ridge_probe,
+    solve_ridge_coefficients,
+    target_functionals,
+)
+from ebpfn.config import CharacterizationConfig, MapConfig, RidgeConfig, RowBudgetConfig
+from ebpfn.data import FeatureSchema, TaskPartition, TuningTask
 
 
 def _task(*, n_fit: int = 180, n_score: int = 80, p: int = 4, seed: int = 3) -> TuningTask:

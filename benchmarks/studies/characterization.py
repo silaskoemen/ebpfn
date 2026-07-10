@@ -12,14 +12,11 @@ from typing import Any
 
 import numpy as np
 import polars as pl
-from ebpfn.characterize import TaskCharacterization
-from ebpfn.characterize import characterize_multiresolution
-from ebpfn.config import CharacterizationStudyConfig
-from ebpfn.config import RowBudgetConfig
-from ebpfn.data import FeatureSchema
-from ebpfn.data import TaskPartition
-from ebpfn.data import TuningTask
+from ebpfn.characterize import TaskCharacterization, characterize_multiresolution
+from ebpfn.config import CharacterizationStudyConfig, RowBudgetConfig
+from ebpfn.data import FeatureSchema, TaskPartition, TuningTask
 from ebpfn.utils import environment_provenance
+from loguru import logger
 
 MECHANISMS = (
     "null",
@@ -33,6 +30,39 @@ MECHANISMS = (
     "rare_feature",
     "mixed",
 )
+
+_LOG_FILE_SINK_ID: int | None = None
+
+
+def _token(value: object) -> str:
+    return str(value).replace("/", "_").replace(".", "p").replace("-", "m")
+
+
+def _part_path(parts_dir: Path, unit_id: str) -> Path:
+    return parts_dir / f"{_token(unit_id)}.parquet"
+
+
+def _load_or_compute_rows(
+    *,
+    parts_dir: Path | None,
+    unit_id: str,
+    description: str,
+    compute: Callable[[], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    if parts_dir is None:
+        return compute()
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    path = _part_path(parts_dir, unit_id)
+    if path.exists():
+        rows = pl.read_parquet(path).to_dicts()
+        logger.debug("checkpoint hit | {} | {} rows", description, len(rows))
+        return rows
+    logger.info("start | {}", description)
+    started = perf_counter()
+    rows = compute()
+    pl.DataFrame(rows).write_parquet(path)
+    logger.info("done | {} | {:.2f}s | {} rows", description, perf_counter() - started, len(rows))
+    return rows
 
 
 def make_task(mechanism: str, config: CharacterizationStudyConfig, repeat: int, *, strength: float = 1.0) -> TuningTask:
@@ -220,6 +250,74 @@ def _append_both_representations(rows: list[dict[str, Any]], result_rows: list[d
     rows.extend(_contrast_rows(result_rows))
 
 
+def _study_mechanisms(config: CharacterizationStudyConfig) -> tuple[str, ...]:
+    if config.mode.name == "audit":
+        return MECHANISMS
+    return ("null", "sparse_linear", "threshold", "interaction", "mixed")
+
+
+def _row_policy_name(policy: RowBudgetConfig) -> str:
+    return f"{policy.spacing}/{policy.weight}/{policy.feature_view}"
+
+
+def _row_policy_candidates(config: CharacterizationStudyConfig) -> tuple[RowBudgetConfig, ...]:
+    selected = RowBudgetConfig(minimum=256, spacing="geometric", weight="uniform", feature_view="frozen")
+    sqrt_challenger = RowBudgetConfig(minimum=256, spacing="sqrt", weight="uniform", feature_view="frozen")
+    local_challenger = RowBudgetConfig(minimum=256, spacing="geometric", weight="uniform", feature_view="local")
+    if config.mode.name == "audit":
+        return (selected, sqrt_challenger, local_challenger)
+    return (selected, local_challenger)
+
+
+def _characterization_rows(
+    *,
+    config: CharacterizationStudyConfig,
+    candidate: Any,
+    mechanism: str,
+    repeat: int,
+    lambda_: float,
+    policy: str,
+    strength: float = 1.0,
+) -> list[dict[str, Any]]:
+    result, runtime, traced_peak, process_peak_rss = _measure(
+        lambda: characterize_multiresolution(make_task(mechanism, config, repeat, strength=strength), candidate)
+    )
+    result_rows = _result_rows(
+        result,
+        mechanism=mechanism,
+        repeat=repeat,
+        lambda_=lambda_,
+        policy=policy,
+        runtime=runtime,
+        traced_peak=traced_peak,
+        process_peak_rss_growth=process_peak_rss,
+        strength=strength,
+    )
+    rows: list[dict[str, Any]] = []
+    _append_both_representations(rows, result_rows)
+    return rows
+
+
+def _p_complexity_row(
+    config: CharacterizationStudyConfig,
+    grid_config: CharacterizationStudyConfig,
+    feature_count: int,
+) -> dict[str, Any]:
+    result, runtime, traced_peak, process_peak_rss_growth = _measure(
+        lambda: characterize_multiresolution(
+            make_task("sparse_linear", grid_config, 0),
+            config.characterization.model_copy(update={"include_observation_coordinates": False}),
+        )
+    )
+    return {
+        "p": feature_count,
+        "runtime_seconds": runtime,
+        "tracemalloc_peak_bytes": traced_peak,
+        "process_peak_rss_growth_bytes": process_peak_rss_growth,
+        "budgets": json.dumps([item["map_dimensions"] for item in result.metadata["budgets"]], sort_keys=True),
+    }
+
+
 def _rank_stability(table: pl.DataFrame, policy: str) -> list[dict[str, Any]]:
     selected = table.filter((pl.col("policy") == policy) & pl.col("representation").is_in(["raw", "contrast"]))
     summaries: list[dict[str, Any]] = []
@@ -345,13 +443,22 @@ def derive_study_status(mode: str, checks: dict[str, bool]) -> tuple[str, list[s
     return "frozen", []
 
 
-def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[str, Any], dict[str, Any]]:
+def run_study(
+    config: CharacterizationStudyConfig,
+    *,
+    parts_dir: Path | None = None,
+) -> tuple[pl.DataFrame, dict[str, Any], dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     base = config.characterization
-    mechanisms = (
-        MECHANISMS if config.mode.name == "audit" else ("null", "sparse_linear", "threshold", "interaction", "mixed")
-    )
+    mechanisms = _study_mechanisms(config)
     ridge_candidates = config.ridge_candidates if config.mode.name == "audit" else (base.ridge.lambda_,)
+    if parts_dir is not None:
+        logger.info(
+            "characterization study | mode={} | mechanisms={} | ridge_candidates={}",
+            config.mode.name,
+            len(mechanisms),
+            len(ridge_candidates),
+        )
     for lambda_ in ridge_candidates:
         candidate = base.model_copy(
             update={
@@ -362,51 +469,48 @@ def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[s
         for repeat in range(config.mode.repeats):
             candidate = candidate.model_copy(update={"repeat": repeat})
             for mechanism in mechanisms:
-                result, runtime, traced_peak, process_peak_rss = _measure(
-                    lambda mechanism=mechanism, repeat=repeat, candidate=candidate: characterize_multiresolution(
-                        make_task(mechanism, config, repeat), candidate
+                rows.extend(
+                    _load_or_compute_rows(
+                        parts_dir=parts_dir,
+                        unit_id=f"ridge/{lambda_}/{repeat}/{mechanism}",
+                        description=f"ridge lambda={lambda_} repeat={repeat} mechanism={mechanism}",
+                        compute=lambda candidate=candidate, mechanism=mechanism, repeat=repeat, lambda_=lambda_: (
+                            _characterization_rows(
+                                config=config,
+                                candidate=candidate,
+                                mechanism=mechanism,
+                                repeat=repeat,
+                                lambda_=lambda_,
+                                policy="ridge",
+                            )
+                        ),
                     )
                 )
-                result_rows = _result_rows(
-                    result,
-                    mechanism=mechanism,
-                    repeat=repeat,
-                    lambda_=lambda_,
-                    policy="ridge",
-                    runtime=runtime,
-                    traced_peak=traced_peak,
-                    process_peak_rss_growth=process_peak_rss,
-                )
-                _append_both_representations(rows, result_rows)
-    all_policies = tuple(
-        RowBudgetConfig(minimum=256, spacing=spacing, weight=weight, feature_view=feature_view)
-        for spacing in ("geometric", "sqrt")
-        for weight in ("uniform", "row_count")
-        for feature_view in ("frozen", "local")
-    )
-    policies = all_policies if config.mode.name == "audit" else (all_policies[0], all_policies[4])
+    policies = _row_policy_candidates(config)
+    logger.info("row-policy candidates | {}", [_row_policy_name(policy) for policy in policies])
     for row_policy in policies:
-        policy_name = f"{row_policy.spacing}/{row_policy.weight}/{row_policy.feature_view}"
+        policy_name = _row_policy_name(row_policy)
         candidate = base.model_copy(update={"row_budgets": row_policy, "include_observation_coordinates": False})
         for repeat in range(config.mode.repeats):
             candidate = candidate.model_copy(update={"repeat": repeat})
             for mechanism in mechanisms:
-                result, runtime, traced_peak, process_peak_rss = _measure(
-                    lambda mechanism=mechanism, repeat=repeat, candidate=candidate: characterize_multiresolution(
-                        make_task(mechanism, config, repeat), candidate
+                rows.extend(
+                    _load_or_compute_rows(
+                        parts_dir=parts_dir,
+                        unit_id=f"row_policy/{policy_name}/{repeat}/{mechanism}",
+                        description=f"row_policy={policy_name} repeat={repeat} mechanism={mechanism}",
+                        compute=lambda candidate=candidate, mechanism=mechanism, repeat=repeat, policy_name=policy_name: (
+                            _characterization_rows(
+                                config=config,
+                                candidate=candidate,
+                                mechanism=mechanism,
+                                repeat=repeat,
+                                lambda_=base.ridge.lambda_,
+                                policy=policy_name,
+                            )
+                        ),
                     )
                 )
-                result_rows = _result_rows(
-                    result,
-                    mechanism=mechanism,
-                    repeat=repeat,
-                    lambda_=base.ridge.lambda_,
-                    policy=policy_name,
-                    runtime=runtime,
-                    traced_peak=traced_peak,
-                    process_peak_rss_growth=process_peak_rss,
-                )
-                _append_both_representations(rows, result_rows)
     table = pl.DataFrame(rows)
     gain_rows = table.filter(
         (pl.col("policy") == "ridge") & (pl.col("representation") == "raw") & (pl.col("statistic") == "gain")
@@ -447,11 +551,7 @@ def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[s
         "sqrt/row_count/local",
     )
     selected_policy = next(policy for policy in preference if policy in competitive)
-    selected_row_policy = next(
-        policy
-        for policy in all_policies
-        if f"{policy.spacing}/{policy.weight}/{policy.feature_view}" == selected_policy
-    )
+    selected_row_policy = next(policy for policy in policies if _row_policy_name(policy) == selected_policy)
     response_rows: list[dict[str, Any]] = []
     response_strengths = (0.0, 0.5, 1.0, 2.0) if config.mode.name == "audit" else (0.0, 1.0)
     response_repeats = range(config.mode.repeats) if config.mode.name == "audit" else range(1)
@@ -466,24 +566,51 @@ def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[s
         candidate = response_candidate.model_copy(update={"repeat": repeat})
         for mechanism in ("sparse_linear", "threshold", "interaction"):
             for strength in response_strengths:
-                result, runtime, traced_peak, process_peak_rss = _measure(
-                    lambda mechanism=mechanism, repeat=repeat, strength=strength, candidate=candidate: (
-                        characterize_multiresolution(make_task(mechanism, config, repeat, strength=strength), candidate)
+                response_rows.extend(
+                    _load_or_compute_rows(
+                        parts_dir=parts_dir,
+                        unit_id=f"response/{repeat}/{mechanism}/{strength}",
+                        description=f"response repeat={repeat} mechanism={mechanism} strength={strength}",
+                        compute=lambda candidate=candidate, mechanism=mechanism, repeat=repeat, strength=strength: (
+                            _characterization_rows(
+                                config=config,
+                                candidate=candidate,
+                                mechanism=mechanism,
+                                repeat=repeat,
+                                lambda_=diagnostic_lambda,
+                                policy="response",
+                                strength=strength,
+                            )
+                        ),
                     )
                 )
-                result_rows = _result_rows(
-                    result,
-                    mechanism=mechanism,
-                    repeat=repeat,
-                    lambda_=diagnostic_lambda,
-                    policy="response",
-                    runtime=runtime,
-                    traced_peak=traced_peak,
-                    process_peak_rss_growth=process_peak_rss,
-                    strength=strength,
+    observation_rows: list[dict[str, Any]] = []
+    observation_candidate = base.model_copy(
+        update={
+            "ridge": base.ridge.model_copy(update={"lambda_": diagnostic_lambda}),
+            "row_budgets": selected_row_policy,
+            "include_observation_coordinates": True,
+        }
+    )
+    for repeat in range(config.mode.repeats):
+        candidate = observation_candidate.model_copy(update={"repeat": repeat})
+        for mechanism in mechanisms:
+            observation_rows.extend(
+                _load_or_compute_rows(
+                    parts_dir=parts_dir,
+                    unit_id=f"observation_on/{repeat}/{mechanism}",
+                    description=f"observation=on repeat={repeat} mechanism={mechanism}",
+                    compute=lambda candidate=candidate, mechanism=mechanism, repeat=repeat: _characterization_rows(
+                        config=config,
+                        candidate=candidate,
+                        mechanism=mechanism,
+                        repeat=repeat,
+                        lambda_=diagnostic_lambda,
+                        policy="observation/on",
+                    ),
                 )
-                _append_both_representations(response_rows, result_rows)
-    table = pl.concat((table, pl.DataFrame(response_rows)), how="vertical_relaxed")
+            )
+    table = pl.concat((table, pl.DataFrame(response_rows), pl.DataFrame(observation_rows)), how="vertical_relaxed")
     expected_learners = {"sparse_linear": "linear", "threshold": "bins", "interaction": "pairwise"}
     response_summary = (
         table.filter(
@@ -502,26 +629,36 @@ def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[s
     coordinate_stability = _coordinate_stability(table, selected_policy)
     rank_stability = _rank_stability(table, selected_policy)
     structure_diagnostics = _structure_diagnostics(table, selected_policy)
+    observation_summary = (
+        table.filter(pl.col("policy").is_in([selected_policy, "observation/on"]))
+        .group_by("policy", "representation", "block")
+        .agg(
+            pl.col("value").abs().mean().alias("mean_absolute"),
+            pl.col("runtime_seconds").mean().alias("mean_runtime_seconds"),
+            pl.len().alias("rows"),
+        )
+        .sort("policy", "representation", "block")
+        .to_dicts()
+    )
     p_complexity: list[dict[str, Any]] = []
     p_grid = (2, 8, 32, 100) if config.mode.name == "audit" else (2, config.mode.n_features)
     for feature_count in p_grid:
         grid_mode = config.mode.model_copy(update={"n_features": feature_count})
         grid_config = config.model_copy(update={"mode": grid_mode})
-        result, runtime, traced_peak, process_peak_rss_growth = _measure(
-            lambda grid_config=grid_config: characterize_multiresolution(
-                make_task("sparse_linear", grid_config, 0),
-                base.model_copy(update={"include_observation_coordinates": False}),
+        p_complexity.extend(
+            _load_or_compute_rows(
+                parts_dir=parts_dir,
+                unit_id=f"p_complexity/{feature_count}",
+                description=f"p_complexity p={feature_count}",
+                compute=lambda grid_config=grid_config, feature_count=feature_count: [
+                    _p_complexity_row(config, grid_config, feature_count)
+                ],
             )
         )
-        p_complexity.append(
-            {
-                "p": feature_count,
-                "runtime_seconds": runtime,
-                "tracemalloc_peak_bytes": traced_peak,
-                "process_peak_rss_growth_bytes": process_peak_rss_growth,
-                "budgets": [item["map_dimensions"] for item in result.metadata["budgets"]],
-            }
-        )
+    p_complexity = [
+        {**row, "budgets": json.loads(row["budgets"]) if isinstance(row["budgets"], str) else row["budgets"]}
+        for row in p_complexity
+    ]
     raw_rows = table.filter(pl.col("representation") == "raw")
     checks = {
         "five_complete_repeats": config.mode.repeats >= 5,
@@ -570,6 +707,7 @@ def run_study(config: CharacterizationStudyConfig) -> tuple[pl.DataFrame, dict[s
         "coordinate_stability": coordinate_stability,
         "rank_stability": rank_stability,
         "response_summary": response_summary,
+        "observation_summary": observation_summary,
         "structure_diagnostics": structure_diagnostics,
     }
     return table, decision, evidence
@@ -583,6 +721,18 @@ def schema_payload(result: TaskCharacterization) -> dict[str, Any]:
     }
 
 
+def _configure_logging(destination: Path) -> None:
+    global _LOG_FILE_SINK_ID
+    if _LOG_FILE_SINK_ID is not None:
+        logger.remove(_LOG_FILE_SINK_ID)
+    _LOG_FILE_SINK_ID = logger.add(
+        destination / "run.log",
+        level="DEBUG",
+        rotation="10 MB",
+        enqueue=True,
+    )
+
+
 def write_study_artifacts(
     config: CharacterizationStudyConfig,
     project_root: Path,
@@ -591,7 +741,8 @@ def write_study_artifacts(
 ) -> dict[str, Any]:
     destination = output or (project_root / config.mode.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
-    table, decision, evidence = run_study(config)
+    _configure_logging(destination)
+    table, decision, evidence = run_study(config, parts_dir=destination / "parts")
     table.write_parquet(destination / "coordinates.parquet")
     (destination / "config.json").write_text(json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True))
     (destination / "decision_log.json").write_text(json.dumps(decision, indent=2, sort_keys=True))

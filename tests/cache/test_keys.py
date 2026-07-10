@@ -1,14 +1,9 @@
 import dataclasses
 
 from ebpfn.cache import evaluation_cache_key
-from ebpfn.config import CacheConfig
-from ebpfn.config import CharacterizationConfig
-from ebpfn.config import CloudConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.config import TuningConfig
+from ebpfn.config import CacheConfig, CharacterizationConfig, CloudConfig, HyperPriorConfig, SearchConfig, TuningConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
+from ebpfn.priors import build_hyperprior, sample_cloud
 from ebpfn.utils import RandomStreams
 
 
@@ -39,7 +34,7 @@ def test_key_changes_for_every_semantic_input():
     other_config = TuningConfig(objective="directed")
     contrast_config = TuningConfig(characterization=CharacterizationConfig(representation="contrast"))
     cloud_config = TuningConfig(cloud=CloudConfig(n_members=32))
-    version_config = TuningConfig(cache=CacheConfig(cache_version="tuning-cache-3"))
+    version_config = TuningConfig(cache=CacheConfig(cache_version="tuning-cache-4"))
 
     assert _key(config, moved_eta, [task]) != base
     assert _key(config, eta, [task], stage="selection", identity=("selection", 0)) != base
@@ -60,6 +55,18 @@ def test_key_is_insensitive_to_storage_only_settings():
     base = _key(TuningConfig(), eta, [task])
     relocated = TuningConfig(cache=CacheConfig(root="/tmp/other", enabled=False))
     assert _key(relocated, eta, [task]) == base
+
+
+def test_key_is_insensitive_to_posthoc_regularization():
+    task = _real_task()
+    eta = build_hyperprior(HyperPriorConfig())
+    base = _key(TuningConfig(), eta, [task])
+    trust_region = TuningConfig(search=SearchConfig(single_task_regularization="trust_region", trust_region_radius=0.5))
+    closest = TuningConfig(
+        search=SearchConfig(single_task_regularization="closest_to_baseline", competitive_tolerance=0.02)
+    )
+    assert _key(trust_region, eta, [task]) == base
+    assert _key(closest, eta, [task]) == base
 
 
 def test_key_tracks_tuning_task_identity():

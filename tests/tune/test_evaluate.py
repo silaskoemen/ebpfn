@@ -3,16 +3,10 @@ import sys
 import numpy as np
 import pytest
 from ebpfn.cache import EvaluationCache
-from ebpfn.config import CloudConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.config import TuningConfig
+from ebpfn.config import CloudConfig, HyperPriorConfig, SearchConfig, TuningConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
-from ebpfn.tune import RealTarget
-from ebpfn.tune import characterize_task
-from ebpfn.tune import evaluate_candidate
-from ebpfn.tune import make_panel
+from ebpfn.priors import EtaVectorizer, build_hyperprior, sample_cloud
+from ebpfn.tune import RealTarget, characterize_task, evaluate_candidate, make_panel
 from ebpfn.utils import RandomStreams
 
 
@@ -98,4 +92,51 @@ def test_cache_hit_returns_an_equal_result(tmp_path):
     second = evaluate_candidate(eta, targets, config, streams, panel, "min", cache=cache)
     assert first.cache_key == second.cache_key
     assert first.total == pytest.approx(second.total)
+    assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_regularization_reuses_raw_cache_and_applies_at_read_time(tmp_path):
+    tasks = _real_tasks(seed=9)
+    base_config = TuningConfig(objective="energy", cloud=CloudConfig(n_members=5))
+    regularized_config = base_config.model_copy(
+        update={
+            "search": SearchConfig(
+                single_task_regularization="trust_region",
+                trust_region_radius=0.01,
+            )
+        }
+    )
+    streams = RandomStreams(10)
+    eta = build_hyperprior(HyperPriorConfig(log_snr_mean=2.0))
+    vectorizer = EtaVectorizer(build_hyperprior(base_config.prior), base_config.active)
+    baseline_vector = tuple(float(value) for value in vectorizer.encode(build_hyperprior(base_config.prior)))
+    panel = make_panel("search", 0, base_config, streams)
+    targets = _targets(tasks, base_config, "min")
+    cache = EvaluationCache(tmp_path)
+
+    raw = evaluate_candidate(
+        eta,
+        targets,
+        base_config,
+        streams,
+        panel,
+        "min",
+        cache=cache,
+        vectorizer=vectorizer,
+        baseline_vector=baseline_vector,
+    )
+    regularized = evaluate_candidate(
+        eta,
+        targets,
+        regularized_config,
+        streams,
+        panel,
+        "min",
+        cache=cache,
+        vectorizer=vectorizer,
+        baseline_vector=baseline_vector,
+    )
+
+    assert raw.cache_key == regularized.cache_key
+    assert regularized.total > raw.total
     assert len(list(tmp_path.iterdir())) == 1

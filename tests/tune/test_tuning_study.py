@@ -4,8 +4,7 @@ from pathlib import Path
 import polars as pl
 from benchmarks.studies import tuning_recovery
 from ebpfn.config import TuningStudyConfig
-from hydra import compose
-from hydra import initialize_config_dir
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 
@@ -63,7 +62,7 @@ def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
         "evidence": {"checks": {"complete": True}},
         "decision": {"status": "provisional", "missing_checks": []},
     }
-    monkeypatch.setattr(tuning_recovery, "run_study", lambda _: result)
+    monkeypatch.setattr(tuning_recovery, "run_study", lambda _, **__: result)
     summary = tuning_recovery.write_study_artifacts(config, tmp_path, output=tmp_path / "out")
     assert summary == {"status": "provisional", "evaluations": 1}
     expected = {
@@ -76,6 +75,48 @@ def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
         "evidence.json",
         "decision_log.json",
         "environment.json",
+        "run.log",
     }
     assert {path.name for path in (tmp_path / "out").iterdir()} == expected
     assert json.loads((tmp_path / "out" / "decision_log.json").read_text())["status"] == "provisional"
+
+
+def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
+    config = _config()
+    specs = [
+        tuning_recovery._CellSpec(0, "raw", "energy", "null", 0, 8, "none"),
+        tuning_recovery._CellSpec(1, "raw", "energy", "planted", 0, 8, "none"),
+    ]
+
+    def rows(repeat: int) -> tuning_recovery._StudyRows:
+        cell = {
+            "representation": "raw",
+            "objective": "energy",
+            "scenario": "null" if repeat == 0 else "planted",
+            "repeat": repeat,
+            "cloud_size": 8,
+            "regularization": "none",
+        }
+        return tuning_recovery._StudyRows(
+            evaluations=[{**cell, "total": float(repeat)}],
+            candidates=[{**cell, "selection_rank": 0}],
+            ranks=[{**cell, "selection_audit_spearman": 1.0}],
+            recovery=[{**cell, "fresh_seed_loss_reduction": 0.0}],
+        )
+
+    parts_dir = tmp_path / "parts"
+    tuning_recovery._write_part(parts_dir, 0, rows(0))
+    called = []
+
+    def run_cell_spec(_, spec):
+        called.append(spec.cell_id)
+        return spec.cell_id, rows(spec.cell_id), 0.0
+
+    monkeypatch.setattr(tuning_recovery, "_cell_specs", lambda _: specs)
+    monkeypatch.setattr(tuning_recovery, "_run_cell_spec", run_cell_spec)
+    monkeypatch.setattr(tuning_recovery, "_finalize_study", lambda _, frames: frames)
+
+    result = tuning_recovery.run_study(config, parts_dir=parts_dir, max_workers=1)
+
+    assert called == [1]
+    assert result["evaluations"]["repeat"].to_list() == [0, 1]

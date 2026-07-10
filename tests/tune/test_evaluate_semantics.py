@@ -5,16 +5,10 @@ import dataclasses
 
 import numpy as np
 import pytest
-from ebpfn.config import CloudConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.config import TuningConfig
+from ebpfn.config import CloudConfig, HyperPriorConfig, TuningConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
-from ebpfn.tune import RealTarget
-from ebpfn.tune import characterize_task
-from ebpfn.tune import evaluate_candidate
-from ebpfn.tune import make_panel
+from ebpfn.priors import build_hyperprior, sample_cloud
+from ebpfn.tune import RealTarget, characterize_task, evaluate_candidate, make_panel
 from ebpfn.tune.evaluate import _aggregate_hierarchical
 from ebpfn.utils import RandomStreams
 

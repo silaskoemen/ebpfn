@@ -8,29 +8,20 @@ PFN import, construction, training, inference, or metric.
 """
 
 import dataclasses
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 
 from ebpfn.cache import EvaluationCache
 from ebpfn.config import TuningConfig
-from ebpfn.data import TuningTask
-from ebpfn.data import content_hash
-from ebpfn.priors import EtaVectorizer
-from ebpfn.priors import build_hyperprior
-from ebpfn.utils import RandomRole
-from ebpfn.utils import RandomStreams
+from ebpfn.data import TuningTask, content_hash
+from ebpfn.priors import EtaVectorizer, build_hyperprior
+from ebpfn.utils import RandomRole, RandomStreams
 
-from .contracts import CandidateRecord
-from .contracts import Panel
-from .contracts import RealTarget
-from .contracts import SearchResult
-from .evaluate import characterize_task
-from .evaluate import evaluate_candidate
+from .contracts import CandidateRecord, Panel, RealTarget, SearchResult
+from .evaluate import characterize_task, evaluate_candidate
 from .optimizer import optimize_population
-from .panels import make_panel
-from .panels import make_panels
+from .panels import make_panel, make_panels
 
 _FIDELITIES = ("min", "full")
 
@@ -153,6 +144,7 @@ def run_search(
         search_records=[*screen_records, *advanced_records, *optimizer_records],
         optimizer_records=optimizer_records,
         selection_records=selection_records,
+        real_targets_by_fidelity={fidelity: tuple(targets(fidelity)) for fidelity in _FIDELITIES},
     )
 
 

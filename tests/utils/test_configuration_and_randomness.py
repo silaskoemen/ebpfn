@@ -3,10 +3,8 @@ import subprocess
 import ebpfn.utils.provenance as provenance
 import numpy as np
 import pytest
-from ebpfn.config import DataPipelineConfig
-from ebpfn.config import StrictConfigModel
-from ebpfn.utils import RandomRole
-from ebpfn.utils import RandomStreams
+from ebpfn.config import DataPipelineConfig, StrictConfigModel
+from ebpfn.utils import RandomRole, RandomStreams
 from pydantic import ValidationError
 
 

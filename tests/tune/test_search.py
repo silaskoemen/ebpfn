@@ -1,15 +1,9 @@
 import numpy as np
 import pytest
 from ebpfn.cache import EvaluationCache
-from ebpfn.config import CacheConfig
-from ebpfn.config import CloudConfig
-from ebpfn.config import HyperPriorConfig
-from ebpfn.config import SearchConfig
-from ebpfn.config import TuningConfig
+from ebpfn.config import CacheConfig, CloudConfig, HyperPriorConfig, SearchConfig, TuningConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import EtaVectorizer
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors import sample_cloud
+from ebpfn.priors import EtaVectorizer, build_hyperprior, sample_cloud
 from ebpfn.tune import run_search
 from ebpfn.utils import RandomStreams
 

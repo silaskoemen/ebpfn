@@ -7,11 +7,8 @@ sized active-feature set. Inactive features are pure noise carried in ``x_raw``.
 
 import numpy as np
 
-from ebpfn.priors.contracts import CompositionalHyperPrior
-from ebpfn.priors.contracts import RouteRealization
-from ebpfn.priors.contracts import SharedTheta
-from ebpfn.priors.features import sample_features
-from ebpfn.priors.features import zscore
+from ebpfn.priors.contracts import CompositionalHyperPrior, RouteRealization, SharedTheta
+from ebpfn.priors.features import sample_features, zscore
 
 _ACTIVE_DISPERSION = 0.1
 

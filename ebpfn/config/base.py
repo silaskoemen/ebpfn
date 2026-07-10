@@ -1,7 +1,6 @@
 """Shared validation policy for nested application configuration."""
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 
 class StrictConfigModel(BaseModel):

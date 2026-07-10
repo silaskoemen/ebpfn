@@ -7,11 +7,8 @@ random fan-in-scaled network, giving a smooth, globally coupled ``f(x)``.
 
 import numpy as np
 
-from ebpfn.priors.contracts import BnnHyperPrior
-from ebpfn.priors.contracts import RouteRealization
-from ebpfn.priors.contracts import SharedTheta
-from ebpfn.priors.features import activation
-from ebpfn.priors.features import sample_features
+from ebpfn.priors.contracts import BnnHyperPrior, RouteRealization, SharedTheta
+from ebpfn.priors.features import activation, sample_features
 
 
 def realize(hp: BnnHyperPrior, n: int, p: int, shared: SharedTheta, rng: np.random.Generator) -> RouteRealization:

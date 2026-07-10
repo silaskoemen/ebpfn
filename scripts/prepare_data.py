@@ -2,18 +2,15 @@
 
 import json
 from pathlib import Path
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import hydra
-from benchmarks.data import canonical_openml_task
-from benchmarks.data import load_openml_source
+from benchmarks.data import canonical_openml_task, load_openml_source
 from ebpfn.config import PrepareDataConfig
 from ebpfn.data import build_evaluation_task
 from ebpfn.utils import environment_provenance
 from hydra.utils import get_original_cwd
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="prepare_data")

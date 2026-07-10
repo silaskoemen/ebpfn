@@ -8,16 +8,17 @@ from ebpfn.config import CharacterizationConfig
 from ebpfn.data import TuningTask
 
 from .budgets import build_row_budget_manifests
-from .contracts import BudgetCharacterizationError
-from .contracts import CharacterizationSchema
-from .contracts import Coordinate
-from .contracts import RowBudgetManifest
-from .contracts import TaskCharacterization
+from .contracts import (
+    BudgetCharacterizationError,
+    CharacterizationSchema,
+    Coordinate,
+    RowBudgetManifest,
+    TaskCharacterization,
+)
 from .maps import build_feature_maps
 from .observation import observation_statistics
 from .ridge import fit_ridge_probe
-from .targets import TARGET_NAMES
-from .targets import target_functionals
+from .targets import TARGET_NAMES, target_functionals
 
 
 def _gain_block(map_name: str, target_name: str) -> str:

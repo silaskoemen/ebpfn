@@ -1,15 +1,13 @@
 """Hydra entry point for the Step 3 prior p-complexity audit."""
 
 from pathlib import Path
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import hydra
 from benchmarks.studies.prior_audit import write_study_artifacts
 from ebpfn.config import PriorStudyConfig
 from hydra.utils import get_original_cwd
-from omegaconf import DictConfig
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="prior")

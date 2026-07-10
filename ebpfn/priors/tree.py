@@ -9,11 +9,8 @@ route for real tabular data (tables + GBMs are tree-structured).
 
 import numpy as np
 
-from ebpfn.priors.contracts import RouteRealization
-from ebpfn.priors.contracts import SharedTheta
-from ebpfn.priors.contracts import TreeHyperPrior
-from ebpfn.priors.features import sample_features
-from ebpfn.priors.features import zscore
+from ebpfn.priors.contracts import RouteRealization, SharedTheta, TreeHyperPrior
+from ebpfn.priors.features import sample_features, zscore
 
 _MAX_DEPTH = 4
 _MAX_ESTIMATORS = 4

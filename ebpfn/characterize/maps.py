@@ -2,8 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass
-from itertools import combinations
-from itertools import product
+from itertools import combinations, product
 
 import numpy as np
 

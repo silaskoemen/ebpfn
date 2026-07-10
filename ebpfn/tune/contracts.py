@@ -5,17 +5,12 @@ dependency leaf that only handles plain payload dicts.
 """
 
 import dataclasses
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Any
 
 from ebpfn.characterize import TaskCharacterization
 from ebpfn.data import TuningTask
-from ebpfn.priors import BnnHyperPrior
-from ebpfn.priors import CompositionalHyperPrior
-from ebpfn.priors import HyperPrior
-from ebpfn.priors import ScmHyperPrior
-from ebpfn.priors import TreeHyperPrior
+from ebpfn.priors import BnnHyperPrior, CompositionalHyperPrior, HyperPrior, ScmHyperPrior, TreeHyperPrior
 
 
 def _eta_from_dict(payload: dict[str, Any]) -> HyperPrior:
@@ -164,3 +159,4 @@ class SearchResult:
     search_records: list[CandidateRecord] = field(default_factory=list)
     optimizer_records: list[CandidateRecord] = field(default_factory=list)
     selection_records: list[CandidateRecord] = field(default_factory=list)
+    real_targets_by_fidelity: dict[str, tuple[RealTarget, ...]] = field(default_factory=dict)

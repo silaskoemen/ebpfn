@@ -11,8 +11,7 @@ import numpy as np
 
 from ebpfn.characterize import TaskCharacterization
 
-from .contracts import BlockDistance
-from .contracts import ValidityReport
+from .contracts import BlockDistance, ValidityReport
 
 
 def assert_comparable(real: TaskCharacterization, other: TaskCharacterization) -> None:
