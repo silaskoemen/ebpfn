@@ -97,6 +97,11 @@ class CharacterizationStudyConfig(StrictConfigModel):
     repeats: int
     max_rows: int
     max_features: int
+    # Ambient feature count for synthetic mechanism tasks. Decoupled from max_features because the
+    # hand-built DGP places signal in a fixed 1-4 features and pads the rest with noise: at the
+    # real-data applicability width (100) a sparse mechanism is buried under noise columns and reads
+    # as unrecoverable. None falls back to max_features (used by the p-complexity cost sweep).
+    synthetic_max_features: int | None = None
     probe_score_fraction: float = 0.25
     characterization: CharacterizationConfig
     ridge_candidates: tuple[float, ...]
@@ -118,6 +123,8 @@ class CharacterizationStudyConfig(StrictConfigModel):
             raise ValueError("study repeats must be positive")
         if self.max_rows < 4 or self.max_features < 4:
             raise ValueError("study row budget and feature count must both be at least four")
+        if self.synthetic_max_features is not None and self.synthetic_max_features < 4:
+            raise ValueError("synthetic_max_features must be at least four (the 'mixed' mechanism uses x0..x3)")
         if not 0.0 < self.probe_score_fraction < 1.0:
             raise ValueError("probe_score_fraction must be in (0, 1)")
         if self.applicability_max_rows < 2 or not 2 <= self.applicability_max_features <= 100:

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/ebpfn_logo.png" width="60%" alt="ebpfn logo">
+</p>
+
 # ebpfn
 
 Empirical-Bayes PFN experiments for tabular regression.

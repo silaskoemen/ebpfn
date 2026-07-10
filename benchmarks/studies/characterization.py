@@ -265,10 +265,11 @@ def _make_synthetic_task(
     strength: float = 1.0,
 ) -> TuningTask:
     n = config.max_rows
+    n_features = config.synthetic_max_features if config.synthetic_max_features is not None else config.max_features
     rng = np.random.default_rng(
         np.random.SeedSequence([config.characterization.seed, repeat, MECHANISMS.index(mechanism)])
     )
-    features = np.clip(rng.normal(size=(n, config.max_features)), -4.0, 4.0)
+    features = np.clip(rng.normal(size=(n, n_features)), -4.0, 4.0)
     noise = rng.normal(size=n)
     if mechanism == "null":
         target = noise
@@ -294,8 +295,8 @@ def _make_synthetic_task(
         target = strength * signal + noise * 0.5
     else:
         raise ValueError(f"unknown mechanism {mechanism!r}")
-    names = tuple(f"x{index}" for index in range(config.max_features))
-    schema = FeatureSchema(names, ("numeric",) * config.max_features)
+    names = tuple(f"x{index}" for index in range(n_features))
+    schema = FeatureSchema(names, ("numeric",) * n_features)
     fit_ids = np.arange(config.n_probe_fit)
     score_ids = np.arange(config.n_probe_fit, n)
     fit = TaskPartition(
@@ -318,7 +319,7 @@ def _make_synthetic_task(
         score,
         schema,
         "study-preprocessed",
-        (0.0,) * config.max_features,
+        (0.0,) * n_features,
     )
 
 
@@ -898,7 +899,9 @@ def run_study(
     p_grid = (2, 8, 32, 100) if config.mode.name == "audit" else (2, config.max_features)
     logger.info(f"📏 p-complexity start | {p_grid}")
     for feature_count in p_grid:
-        grid_config = config.model_copy(update={"max_features": feature_count})
+        # Cost probe: measure map/ridge scaling vs ambient width. Clear synthetic_max_features so
+        # synthetic tasks actually grow with feature_count here (the main emission keeps it pinned).
+        grid_config = config.model_copy(update={"max_features": feature_count, "synthetic_max_features": None})
         p_complexity.extend(
             _load_or_compute_rows(
                 checkpoints=checkpoints,
@@ -921,10 +924,13 @@ def run_study(
         "selected_lambda_null_nonpositive": bool(eligible) if has_null_reference else True,
         "complete_domain_feasible_within_scope": (config.max_rows >= config.applicability_max_rows),
         "feature_width_feasible_within_scope": max(p_grid) >= config.applicability_max_features,
+        # tracemalloc peak is the deterministic Python-level accounting; require it everywhere.
+        # process RSS growth is a noisy OS watermark that legitimately reads 0 when the allocator
+        # reuses mapped pages (small/fast runs), so it is recorded but not gated on.
         "memory_recorded": bool(
             (raw_rows["tracemalloc_peak_bytes"] > 0).all()
             and (raw_rows["process_peak_rss_growth_bytes"] >= 0).all()
-            and any(row["process_peak_rss_growth_bytes"] > 0 for row in p_complexity)
+            and all(row["tracemalloc_peak_bytes"] > 0 for row in p_complexity)
         ),
         "stability_reported": bool(coordinate_stability and any(item["pair_count"] > 0 for item in rank_stability)),
         "response_curves_reported": bool(response_summary) if _is_synthetic_dataset(config) else True,

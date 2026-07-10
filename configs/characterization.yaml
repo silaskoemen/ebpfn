@@ -4,6 +4,10 @@ defaults:
 
 dataset: synthetic_handbuilt
 output_root: benchmarks/results/characterization
+# Synthetic mechanism tasks always run at this ambient width, decoupled from max_features (which
+# reaches 100 in audit for the real-data applicability claim). Keeps sparse hand-built signals
+# recoverable instead of buried under noise columns; the p-complexity cost sweep ignores it.
+synthetic_max_features: 8
 probe_score_fraction: 0.25
 
 characterization:
