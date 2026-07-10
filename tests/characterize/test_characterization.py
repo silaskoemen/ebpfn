@@ -54,6 +54,18 @@ def test_row_budget_manifests_are_nested_reproducible_and_weighted():
         assert set(smaller.probe_score_indices) <= set(larger.probe_score_indices)
 
 
+def test_explicit_random_identity_decouples_manifests_from_task_identity():
+    task = _task()
+    renamed = replace(task, task_id="renamed-task", characterization_split_id="renamed-split")
+    identity = ("selection", 2, "target", 4)
+    first = build_row_budget_manifests(task, _config(), random_identity=identity)
+    second = build_row_budget_manifests(renamed, _config(), random_identity=identity)
+    assert first == second
+    first_characterization = characterize_multiresolution(task, _config(), random_identity=identity)
+    second_characterization = characterize_multiresolution(renamed, _config(), random_identity=identity)
+    assert np.array_equal(first_characterization.values, second_characterization.values)
+
+
 def test_row_budget_allocation_retains_a_single_available_score_row():
     task = _task(n_fit=1000, n_score=1)
     manifest = build_row_budget_manifests(task, _config())[0]

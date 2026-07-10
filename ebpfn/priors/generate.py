@@ -43,11 +43,25 @@ def build_hyperprior(config: HyperPriorConfig) -> HyperPrior:
 
 
 def sample_task(
-    eta: HyperPrior, shape: CharacterizationShape, streams: RandomStreams, *identity: str | int
+    eta: HyperPrior,
+    shape: CharacterizationShape,
+    streams: RandomStreams,
+    *identity: str | int,
+    common_random_numbers: bool = False,
 ) -> GeneratedTask:
+    """Draw one task, optionally coupling the underlying uniforms across ``eta``."""
     eta_key = content_hash(eta, namespace="eta-1")
+    # Default path keeps eta_key in its original leading position so generated
+    # seeds are stable. Common random numbers drop eta_key alone to couple the
+    # underlying uniforms across candidate hyperpriors.
+    eta_tokens: tuple[str | int, ...] = () if common_random_numbers else (eta_key,)
     rng = streams.generator(
-        RandomRole.GENERATION, eta_key, shape.n_probe_fit, shape.n_probe_score, shape.p_numeric, *identity
+        RandomRole.GENERATION,
+        *eta_tokens,
+        shape.n_probe_fit,
+        shape.n_probe_score,
+        shape.p_numeric,
+        *identity,
     )
     # Include the base seed so distinct streams never share a synthetic task id.
     tokens: tuple[Any, ...] = (streams.base_seed, eta_key, *identity)
@@ -55,8 +69,24 @@ def sample_task(
 
 
 def sample_cloud(
-    eta: HyperPrior, shape: CharacterizationShape, n_members: int, streams: RandomStreams, *identity: str | int
+    eta: HyperPrior,
+    shape: CharacterizationShape,
+    n_members: int,
+    streams: RandomStreams,
+    *identity: str | int,
+    common_random_numbers: bool = False,
 ) -> list[GeneratedTask]:
+    """Draw fixed member slots, optionally coupled across candidate hyperpriors."""
     if n_members < 1:
         raise ValueError("n_members must be at least one")
-    return [sample_task(eta, shape, streams, *identity, member) for member in range(n_members)]
+    return [
+        sample_task(
+            eta,
+            shape,
+            streams,
+            *identity,
+            member,
+            common_random_numbers=common_random_numbers,
+        )
+        for member in range(n_members)
+    ]

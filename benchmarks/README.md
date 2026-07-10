@@ -25,3 +25,4 @@ Comparisons and ablations join `studies/`/`diagnostics/` as siblings when they a
 |---|---|
 | `pixi run characterize` | `benchmarks/studies/characterize.py` — Step 2 characterization study (`characterization_mode=audit` for the evidence gate) |
 | `pixi run prior-audit` | `benchmarks/studies/prior.py` — Step 3 prior p-complexity + reproducibility audit (`prior_mode=audit` for the denser grid; joint-Sobol identifiability is deferred to Step 4) |
+| `pixi run python -m benchmarks.studies.tuning` | Step 4 planted/null recovery matrix (`tuning_mode=audit` for the full cloud-size and D3 grid) |

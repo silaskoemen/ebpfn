@@ -54,6 +54,21 @@ def test_distinct_identity_produces_distinct_tasks():
     assert not np.array_equal(first.tuning.probe_fit.y, other.tuning.probe_fit.y)
 
 
+def test_common_random_numbers_couple_nearby_hyperpriors():
+    base = _one_hot(_eta(log_snr_mean=0.0), "bnn")
+    moved = dataclasses.replace(base, log_snr_mean=0.75)
+    shape = _shape(120, 60, 8)
+    streams = RandomStreams(7)
+    first = sample_task(base, shape, streams, "panel", 0, common_random_numbers=True)
+    second = sample_task(moved, shape, streams, "panel", 0, common_random_numbers=True)
+    assert first.diagnostics["route"] == second.diagnostics["route"] == "bnn"
+    assert second.diagnostics["shared_theta"]["log_snr"] - first.diagnostics["shared_theta"][
+        "log_snr"
+    ] == pytest.approx(0.75)
+    assert first.tuning.probe_fit.X.equals(second.tuning.probe_fit.X)
+    assert first.tuning.task_id != second.tuning.task_id
+
+
 def test_route_frequencies_converge_to_direct_weights():
     eta = _eta(generator_weights=[0.4, 0.3, 0.2, 0.1])
     streams = RandomStreams(0)

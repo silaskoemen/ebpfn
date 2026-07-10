@@ -7,6 +7,15 @@ from typing import Any
 import numpy as np
 
 
+class BudgetCharacterizationError(RuntimeError):
+    """A characterization failure annotated with its active row budget."""
+
+    def __init__(self, row_budget: int, original: Exception) -> None:
+        super().__init__(f"row budget {row_budget}: {original}")
+        self.row_budget = row_budget
+        self.original = original
+
+
 @dataclass(frozen=True)
 class Coordinate:
     name: str

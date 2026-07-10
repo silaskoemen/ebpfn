@@ -1,0 +1,10 @@
+# @package mode
+name: fast
+output_dir: benchmarks/results/tuning/fast
+repeats: 1
+n_probe_fit: 96
+n_probe_score: 48
+n_features: 5
+n_real_tasks: 1
+cloud_sizes: [8]
+regularization_policies: [none]

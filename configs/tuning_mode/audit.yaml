@@ -1,0 +1,10 @@
+# @package mode
+name: audit
+output_dir: benchmarks/results/tuning/audit
+repeats: 8
+n_probe_fit: 512
+n_probe_score: 256
+n_features: 20
+n_real_tasks: 1
+cloud_sizes: [64, 128, 256]
+regularization_policies: [none, trust_region, closest_to_baseline]

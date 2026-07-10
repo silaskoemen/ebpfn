@@ -22,12 +22,24 @@ from ebpfn.config.prior import PriorStudyModeConfig
 from ebpfn.config.prior import ScmRouteConfig
 from ebpfn.config.prior import ShapeJitterConfig
 from ebpfn.config.prior import TreeRouteConfig
+from ebpfn.config.tune import DEFAULT_ACTIVE_COORDINATES
+from ebpfn.config.tune import CacheConfig
+from ebpfn.config.tune import CloudConfig
+from ebpfn.config.tune import CompareConfig
+from ebpfn.config.tune import SearchConfig
+from ebpfn.config.tune import TuningConfig
+from ebpfn.config.tune import TuningStudyConfig
+from ebpfn.config.tune import TuningStudyModeConfig
 
 __all__ = [
+    "DEFAULT_ACTIVE_COORDINATES",
     "BnnRouteConfig",
+    "CacheConfig",
     "CharacterizationConfig",
     "CharacterizationStudyConfig",
     "CharacterizationStudyModeConfig",
+    "CloudConfig",
+    "CompareConfig",
     "CompositionalRouteConfig",
     "DataPipelineConfig",
     "DataPreparationModeConfig",
@@ -42,8 +54,12 @@ __all__ = [
     "RotationConfig",
     "RowBudgetConfig",
     "ScmRouteConfig",
+    "SearchConfig",
     "ShapeJitterConfig",
     "SplitConfig",
     "StrictConfigModel",
     "TreeRouteConfig",
+    "TuningConfig",
+    "TuningStudyConfig",
+    "TuningStudyModeConfig",
 ]

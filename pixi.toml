@@ -8,11 +8,10 @@ platforms = ["osx-arm64"]
 
 [tasks]
 setup = "pre-commit install && pip install -e ."
-test = "python -m pytest -q"
+test = "pytest"
 prepare-data = "python -m scripts.prepare_data"
 characterize = "python -m benchmarks.studies.characterize"
 prior-audit = "python -m benchmarks.studies.prior"
-format = "ruff format ebpfn tests benchmarks scripts"
 clean = "rm -rf build dist *.egg-info .pytest_cache .ruff_cache catboost_info"
 
 [dependencies]

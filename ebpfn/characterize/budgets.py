@@ -31,12 +31,18 @@ def _budget_grid(total: int, minimum: int, spacing: str) -> tuple[int, ...]:
     return tuple(sorted({start, *(round(value * value) for value in roots[1:-1]), total}))
 
 
-def build_row_budget_manifests(task: TuningTask, config: CharacterizationConfig) -> tuple[RowBudgetManifest, ...]:
+def build_row_budget_manifests(
+    task: TuningTask,
+    config: CharacterizationConfig,
+    *,
+    random_identity: tuple[str | int, ...] | None = None,
+) -> tuple[RowBudgetManifest, ...]:
     n_fit = task.probe_fit.X.height
     n_score = task.probe_score.X.height
     total = n_fit + n_score
     budgets = _budget_grid(total, config.row_budgets.minimum, config.row_budgets.spacing)
-    identity = (task.task_id, task.characterization_split_id, config.version, config.seed, config.repeat)
+    task_identity = random_identity or (task.task_id, task.characterization_split_id)
+    identity = (*task_identity, config.version, config.seed, config.repeat)
     fit_order = np.random.default_rng(_seed(*identity, "fit-order")).permutation(n_fit)
     score_order = np.random.default_rng(_seed(*identity, "score-order")).permutation(n_score)
     manifests: list[RowBudgetManifest] = []

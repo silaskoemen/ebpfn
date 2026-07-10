@@ -8,6 +8,7 @@ from ebpfn.config import CharacterizationConfig
 from ebpfn.data import TuningTask
 
 from .budgets import build_row_budget_manifests
+from .contracts import BudgetCharacterizationError
 from .contracts import CharacterizationSchema
 from .contracts import Coordinate
 from .contracts import RowBudgetManifest
@@ -125,6 +126,8 @@ def characterize(
     task: TuningTask,
     manifest: RowBudgetManifest,
     config: CharacterizationConfig,
+    *,
+    random_identity: tuple[str | int, ...] | None = None,
 ) -> TaskCharacterization:
     fit_rows = list(manifest.probe_fit_indices)
     score_rows = list(manifest.probe_score_indices)
@@ -144,8 +147,7 @@ def characterize(
         feature_names,
         config.maps,
         seed_identity=(
-            task.task_id,
-            task.characterization_split_id,
+            *(random_identity or (task.task_id, task.characterization_split_id)),
             config.version,
             config.seed,
             config.repeat,
@@ -211,8 +213,21 @@ def characterize(
     )
 
 
-def characterize_multiresolution(task: TuningTask, config: CharacterizationConfig) -> TaskCharacterization:
-    results = [characterize(task, manifest, config) for manifest in build_row_budget_manifests(task, config)]
+def characterize_multiresolution(
+    task: TuningTask,
+    config: CharacterizationConfig,
+    *,
+    random_identity: tuple[str | int, ...] | None = None,
+) -> TaskCharacterization:
+    manifests = build_row_budget_manifests(task, config, random_identity=random_identity)
+    results = []
+    for manifest in manifests:
+        try:
+            results.append(characterize(task, manifest, config, random_identity=random_identity))
+        except Exception as error:
+            if random_identity is None:
+                raise
+            raise BudgetCharacterizationError(manifest.row_budget, error) from error
     coordinates = tuple(coordinate for result in results for coordinate in result.coordinates)
     schema = CharacterizationSchema(config.version, config.representation, coordinates)
     metadata = {

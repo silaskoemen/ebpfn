@@ -1,0 +1,44 @@
+defaults:
+  - tuning_mode: fast
+  - _self_
+
+tuning:
+  seed: 0
+  characterization:
+    row_budgets:
+      minimum: 64
+      spacing: geometric
+      weight: uniform
+      feature_view: frozen
+    maps:
+      max_products: 32
+      max_conjunctions: 32
+      max_rff: 64
+      rff_distance_rows: 256
+  cloud:
+    n_members: 8
+    on_failure: raise
+  search:
+    sobol_candidates: 4
+    retain_strong: 3
+    retain_diverse: 1
+    optimizer: none
+    de_maxiter: 10
+    de_popsize: 8
+    de_fidelity: min
+    selection_panel_size: 2
+    single_task_regularization: none
+    competitive_tolerance: null
+  cache:
+    enabled: true
+    root: .cache/tuning-step4
+    cache_version: tuning-cache-2
+
+planted_log_snr_shift: 0.8
+trust_region_radius: 0.5
+competitive_tolerance: 0.02
+decision_owner: ebpfn-v1
+decision_date: "2026-07-07"
+multiresolution_decision: pending
+synthetic_failure_decision: pending
+single_task_regularization_decision: pending

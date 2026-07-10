@@ -1,6 +1,7 @@
 """Fixed-map regression characterization."""
 
 from ebpfn.characterize.budgets import build_row_budget_manifests
+from ebpfn.characterize.contracts import BudgetCharacterizationError
 from ebpfn.characterize.contracts import CharacterizationDiagnostics
 from ebpfn.characterize.contracts import CharacterizationSchema
 from ebpfn.characterize.contracts import Coordinate
@@ -19,6 +20,7 @@ from ebpfn.characterize.targets import target_functionals
 
 __all__ = [
     "TARGET_NAMES",
+    "BudgetCharacterizationError",
     "CharacterizationDiagnostics",
     "CharacterizationSchema",
     "Coordinate",
