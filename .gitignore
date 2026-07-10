@@ -15,6 +15,9 @@ explore/*
 **/*.db
 outputs/*
 
+# Hydra run outputs
+multirun/
+
 # C extensions
 *.so
 
