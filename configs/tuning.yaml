@@ -34,7 +34,7 @@ tuning:
     root: .cache/tuning-step4
     cache_version: tuning-cache-3
 
-planted_log_snr_shift: 0.8
+planted_unit_shift: 0.25
 trust_region_radius: 0.5
 competitive_tolerance: 0.02
 decision_owner: ebpfn-v1

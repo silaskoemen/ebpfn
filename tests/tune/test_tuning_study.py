@@ -74,6 +74,8 @@ def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
         "config.json",
         "evidence.json",
         "decision_log.json",
+        "apparent_snr.json",
+        "summary.md",
         "environment.json",
         "run.log",
     }
@@ -84,15 +86,15 @@ def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
 def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
     config = _config()
     specs = [
-        tuning_recovery._CellSpec(0, "raw", "energy", "null", 0, 8, "none"),
-        tuning_recovery._CellSpec(1, "raw", "energy", "planted", 0, 8, "none"),
+        tuning_recovery._CellSpec(0, "raw", "energy", "base", 0, 8, "none"),
+        tuning_recovery._CellSpec(1, "raw", "energy", "log_snr_mean", 0, 8, "none"),
     ]
 
     def rows(repeat: int) -> tuning_recovery._StudyRows:
         cell = {
             "representation": "raw",
             "objective": "energy",
-            "scenario": "null" if repeat == 0 else "planted",
+            "scenario": "base" if repeat == 0 else "log_snr_mean",
             "repeat": repeat,
             "cloud_size": 8,
             "regularization": "none",
@@ -104,8 +106,8 @@ def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
             recovery=[{**cell, "fresh_seed_loss_reduction": 0.0}],
         )
 
-    parts_dir = tmp_path / "parts"
-    tuning_recovery._write_part(parts_dir, 0, rows(0))
+    checkpoint_path = tmp_path / "checkpoints.sqlite"
+    tuning_recovery._CellStore(checkpoint_path).put(0, rows(0))
     called = []
 
     def run_cell_spec(_, spec):
@@ -116,7 +118,7 @@ def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
     monkeypatch.setattr(tuning_recovery, "_run_cell_spec", run_cell_spec)
     monkeypatch.setattr(tuning_recovery, "_finalize_study", lambda _, frames: frames)
 
-    result = tuning_recovery.run_study(config, parts_dir=parts_dir, max_workers=1)
+    result = tuning_recovery.run_study(config, checkpoint_path=checkpoint_path, max_workers=1)
 
     assert called == [1]
     assert result["evaluations"]["repeat"].to_list() == [0, 1]

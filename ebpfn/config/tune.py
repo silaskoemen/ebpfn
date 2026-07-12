@@ -167,7 +167,7 @@ class TuningConfig(StrictConfigModel):
 class TuningStudyModeConfig(StrictConfigModel):
     """Scale and artifact location for the Step 4 recovery matrix."""
 
-    name: Literal["fast", "audit"]
+    name: Literal["fast", "audit", "sweep"]
     output_dir: str
     repeats: int
     n_probe_fit: int
@@ -211,7 +211,17 @@ class TuningStudyConfig(StrictConfigModel):
 
     mode: TuningStudyModeConfig
     tuning: TuningConfig = TuningConfig()
-    planted_log_snr_shift: float = 0.8
+    # Each planted scenario shifts one active knob by planted_unit_shift in vectorized [0,1] space,
+    # so perturbations (and parameter_error) are comparable across knobs. log_snr_mean is kept as one
+    # knob for a direct comparison against the structural levers. Every entry must be in tuning.active.
+    planted_knobs: tuple[str, ...] = (
+        "log_snr_mean",
+        "heteroskedastic_rate",
+        "compositional_active_fraction_mean",
+        "scm_target_indegree_mean",
+        "corr_strength_mean",
+    )
+    planted_unit_shift: float = 0.25
     trust_region_radius: float = 0.5
     competitive_tolerance: float = 0.02
     decision_owner: str
@@ -220,10 +230,24 @@ class TuningStudyConfig(StrictConfigModel):
     synthetic_failure_decision: Literal["pending", "raise", "exclude"] = "pending"
     single_task_regularization_decision: Literal["pending", "none", "trust_region", "closest_to_baseline"] = "pending"
 
+    @field_validator("planted_knobs", mode="before")
+    @classmethod
+    def freeze_planted_knobs(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
+
     @model_validator(mode="after")
     def validate_values(self) -> "TuningStudyConfig":
-        if self.planted_log_snr_shift == 0.0 or self.trust_region_radius <= 0.0 or self.competitive_tolerance <= 0.0:
-            raise ValueError("planted shift must be nonzero and regularization thresholds positive")
+        if (
+            not 0.0 < self.planted_unit_shift < 1.0
+            or self.trust_region_radius <= 0.0
+            or self.competitive_tolerance <= 0.0
+        ):
+            raise ValueError("planted_unit_shift must be in (0, 1) and regularization thresholds positive")
+        if not self.planted_knobs or len(set(self.planted_knobs)) != len(self.planted_knobs):
+            raise ValueError("planted_knobs must be nonempty and unique")
+        unknown = [knob for knob in self.planted_knobs if knob not in self.tuning.active]
+        if unknown:
+            raise ValueError(f"planted_knobs must be a subset of tuning.active; unknown: {unknown}")
         if not self.decision_owner or not self.decision_date or not self.multiresolution_decision:
             raise ValueError("decision metadata must be nonempty")
         if (

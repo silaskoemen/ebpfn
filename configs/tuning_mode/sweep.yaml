@@ -1,0 +1,13 @@
+# @package mode
+# Knob-identifiability sweep: full audit shape, but one cloud size and one regularization
+# (the recovery question needs neither the cloud nor the D3 reg grid), so the 6 planted
+# scenarios stay affordable. Cloud fixed high (256) to keep the objective estimate un-watered-down.
+name: sweep
+output_dir: benchmarks/results/tuning/sweep
+repeats: 8
+n_probe_fit: 512
+n_probe_score: 256
+n_features: 20
+n_real_tasks: 1
+cloud_sizes: [256]
+regularization_policies: [trust_region]

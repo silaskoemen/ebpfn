@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: ty
         name: ty
-        entry: ty check ebpfn benchmarks scripts --ignore unresolved-import
+        entry: pixi run ty check ebpfn benchmarks scripts --ignore unresolved-import
         language: system
         types: [python]
         pass_filenames: false

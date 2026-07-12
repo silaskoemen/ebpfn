@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import os
+import sqlite3
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -15,14 +16,20 @@ from ebpfn.cache import EvaluationCache
 from ebpfn.config import TuningConfig, TuningStudyConfig
 from ebpfn.data import CharacterizationShape
 from ebpfn.priors import EtaVectorizer, HyperPrior, build_hyperprior, sample_task
-from ebpfn.tune import CandidateRecord, EvaluationResult, evaluate_candidate, make_panel, run_search
+from ebpfn.tune import CandidateRecord, EvaluationResult, characterize_task, evaluate_candidate, make_panel, run_search
 from ebpfn.utils import RandomStreams, environment_provenance
 from loguru import logger
 
 _REPRESENTATIONS = ("raw", "contrast")
 _OBJECTIVES = ("directed", "energy")
-_SCENARIOS = ("null", "planted")
-_TABLE_NAMES = ("evaluations", "candidates", "failure_events", "rank_stability", "recovery")
+
+
+def _scenarios(config: TuningStudyConfig) -> tuple[str, ...]:
+    """`base` (unperturbed baseline prior) + one planted scenario per active knob under test. The
+    planted scenario name is the knob it perturbs, so the `scenario` column reads directly as which
+    eta was used: `base`, or `base` shifted along one knob. (`base`, not `null`, to avoid collision
+    with the Step-2 null *mechanism*; this is the no-planted-shift control on the search.)"""
+    return ("base", *config.planted_knobs)
 
 
 def _float_metric(value: object) -> float:
@@ -63,11 +70,22 @@ def _cell_config(
     )
 
 
-def _planted_eta(config: TuningStudyConfig, scenario: str) -> HyperPrior:
-    baseline = build_hyperprior(config.tuning.prior)
-    if scenario == "null":
-        return baseline
-    return dataclasses.replace(baseline, log_snr_mean=baseline.log_snr_mean + config.planted_log_snr_shift)
+def _planted_eta(
+    config: TuningStudyConfig, scenario: str, vectorizer: EtaVectorizer, baseline_eta: HyperPrior
+) -> HyperPrior:
+    """`base` returns the baseline; a knob scenario shifts that one coordinate by planted_unit_shift
+    in vectorized [0,1] space (toward the interior so it stays feasible) and decodes back to an eta."""
+    if scenario == "base":
+        return baseline_eta
+    index = vectorizer.active.index(scenario)
+    vector = vectorizer.encode(baseline_eta)
+    base = float(vector[index])
+    vector[index] = (
+        base + config.planted_unit_shift
+        if base + config.planted_unit_shift <= 1.0
+        else base - config.planted_unit_shift
+    )
+    return vectorizer.decode(vector)
 
 
 def _real_tasks(
@@ -191,39 +209,45 @@ def _rows_to_frames(rows: _StudyRows) -> dict[str, pl.DataFrame]:
     }
 
 
-def _cell_part_dir(parts_dir: Path, cell_id: int) -> Path:
-    return parts_dir / f"cell_{cell_id:04d}"
+class _CellStore:
+    """Single-file SQLite checkpoint: one JSON payload per completed cell, keyed by cell_id.
 
+    Replaces the old per-cell parquet directories (thousands of tiny files with per-file footer
+    overhead) with one file. The main process is the only writer (workers return rows, the
+    ``as_completed`` loop persists them), so a single connection per call needs no locking.
+    """
 
-def _part_complete(parts_dir: Path, cell_id: int) -> bool:
-    part = _cell_part_dir(parts_dir, cell_id)
-    return (part / "complete.json").exists() and all((part / f"{name}.parquet").exists() for name in _TABLE_NAMES)
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS cells (cell_id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
 
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.path)
 
-def _write_part(parts_dir: Path, cell_id: int, rows: _StudyRows) -> None:
-    part = _cell_part_dir(parts_dir, cell_id)
-    part.mkdir(parents=True, exist_ok=True)
-    for name, frame in _rows_to_frames(rows).items():
-        frame.write_parquet(part / f"{name}.parquet")
-    (part / "complete.json").write_text(json.dumps({"cell_id": cell_id}, sort_keys=True))
+    def completed_ids(self) -> set[int]:
+        with self._connect() as connection:
+            return {int(row[0]) for row in connection.execute("SELECT cell_id FROM cells")}
 
+    def put(self, cell_id: int, rows: _StudyRows) -> None:
+        payload = json.dumps(dataclasses.asdict(rows))
+        with self._connect() as connection:
+            connection.execute("INSERT OR REPLACE INTO cells(cell_id, payload) VALUES (?, ?)", (cell_id, payload))
 
-def _read_parts(parts_dir: Path, specs: list[_CellSpec]) -> dict[str, pl.DataFrame]:
-    frames: dict[str, list[pl.DataFrame]] = {name: [] for name in _TABLE_NAMES}
-    for spec in specs:
-        part = _cell_part_dir(parts_dir, spec.cell_id)
-        for name in _TABLE_NAMES:
-            frames[name].append(pl.read_parquet(part / f"{name}.parquet"))
-    return {
-        name: pl.concat(parts, how="diagonal_relaxed") if parts else pl.DataFrame() for name, parts in frames.items()
-    }
+    def read_frames(self) -> dict[str, pl.DataFrame]:
+        merged = _StudyRows()
+        with self._connect() as connection:
+            for (payload,) in connection.execute("SELECT payload FROM cells ORDER BY cell_id"):
+                _extend_rows(merged, _StudyRows(**json.loads(payload)))
+        return _rows_to_frames(merged)
 
 
 def _cell_specs(config: TuningStudyConfig) -> list[_CellSpec]:
     specs: list[_CellSpec] = []
     for representation in _REPRESENTATIONS:
         for objective in _OBJECTIVES:
-            for scenario in _SCENARIOS:
+            for scenario in _scenarios(config):
                 for cloud_size in config.mode.cloud_sizes:
                     for regularization in config.mode.regularization_policies:
                         for repeat in range(config.mode.repeats):
@@ -341,7 +365,7 @@ def _run_cell(
             "selected_audit_loss": selected_audit,
             "baseline_audit_loss": baseline_audit,
             "fresh_seed_loss_reduction": baseline_audit - selected_audit,
-            "null_movement": float(np.linalg.norm(selected_vector - np.asarray(baseline_vector))),
+            "movement_from_base": float(np.linalg.norm(selected_vector - np.asarray(baseline_vector))),
             "parameter_error": float(np.linalg.norm(selected_vector - planted_vector)),
             "failure_count": sum(record.result.failures for record in audit_records),
             "runtime_seconds": sum(record.result.runtime_s for record in audit_records),
@@ -364,10 +388,10 @@ def _run_cell(
 
 def _run_cell_spec(config: TuningStudyConfig, spec: _CellSpec) -> tuple[int, _StudyRows, float]:
     start = time.perf_counter()
-    planted_eta = _planted_eta(config, spec.scenario)
     tuning = _cell_config(config, spec.representation, spec.objective, spec.cloud_size, spec.regularization)
     baseline_eta = build_hyperprior(tuning.prior)
     vectorizer = EtaVectorizer(baseline_eta, tuning.active)
+    planted_eta = _planted_eta(config, spec.scenario, vectorizer, baseline_eta)
     planted_vector = np.asarray(vectorizer.encode(planted_eta))
     cell = {
         "representation": spec.representation,
@@ -413,7 +437,7 @@ def _finalize_study(config: TuningStudyConfig, frames: dict[str, pl.DataFrame]) 
     checks = {
         "all_four_construction_cells": combinations
         == {(representation, objective) for representation in _REPRESENTATIONS for objective in _OBJECTIVES},
-        "planted_and_null": scenarios == set(_SCENARIOS),
+        "base_and_planted": scenarios == set(_scenarios(config)),
         "cloud_size_grid_complete": cloud_sizes == set(config.mode.cloud_sizes),
         "regularization_grid_complete": regularization_policies == set(config.mode.regularization_policies),
         "independent_final_audit": bool(evaluations.filter(pl.col("stage") == "final_audit").height),
@@ -424,7 +448,9 @@ def _finalize_study(config: TuningStudyConfig, frames: dict[str, pl.DataFrame]) 
     evidence = {
         "checks": checks,
         "median_fresh_seed_loss_reduction": _float_metric(recovery["fresh_seed_loss_reduction"].median()),
-        "median_null_movement": _float_metric(recovery.filter(pl.col("scenario") == "null")["null_movement"].median()),
+        "median_base_movement": _float_metric(
+            recovery.filter(pl.col("scenario") == "base")["movement_from_base"].median()
+        ),
         "median_rank_stability": None if rank_values.is_empty() else _float_metric(rank_values.median()),
         "total_failures": int(recovery["failure_count"].sum()),
     }
@@ -452,30 +478,47 @@ def _finalize_study(config: TuningStudyConfig, frames: dict[str, pl.DataFrame]) 
 def run_study(
     config: TuningStudyConfig,
     *,
-    parts_dir: Path | None = None,
+    checkpoint_path: Path | None = None,
     max_workers: int | None = None,
 ) -> dict[str, Any]:
-    """Run all four construction cells under planted and null recovery."""
+    """Run all four construction cells under base and planted recovery.
+
+    With ``checkpoint_path`` set, completed cells are persisted to a single SQLite file and skipped
+    on resume; without it the run is in-memory and serial.
+    """
     specs = _cell_specs(config)
-    if parts_dir is None:
+    logger.info(
+        f"🧭 tuning recovery | mode={config.mode.name} | {len(specs)} cells "
+        f"({len(_REPRESENTATIONS)} rep x {len(_OBJECTIVES)} obj x {len(_scenarios(config))} scenario "
+        f"x {len(config.mode.cloud_sizes)} cloud x {len(config.mode.regularization_policies)} reg "
+        f"x {config.mode.repeats} repeat)"
+    )
+    logger.info(f"🎛️ scenarios: {', '.join(_scenarios(config))}")
+    logger.info(
+        f"🧵 parallelism | cpu_count={os.cpu_count()} | "
+        f"EBPFN_TUNING_WORKERS={os.environ.get('EBPFN_TUNING_WORKERS', '<unset>')} | "
+        f"max_workers={max_workers if max_workers is not None else '<auto>'}"
+    )
+    if checkpoint_path is None:
         rows = _StudyRows()
         for spec in specs:
             _, cell_rows, _ = _run_cell_spec(config, spec)
             _extend_rows(rows, cell_rows)
         return _finalize_study(config, _rows_to_frames(rows))
 
-    parts_dir.mkdir(parents=True, exist_ok=True)
-    pending = [spec for spec in specs if not _part_complete(parts_dir, spec.cell_id)]
+    store = _CellStore(checkpoint_path)
+    done = store.completed_ids()
+    pending = [spec for spec in specs if spec.cell_id not in done]
     completed = len(specs) - len(pending)
     if completed:
-        logger.info(f"  resuming | {completed}/{len(specs)} cells already complete")
+        logger.info(f"  resuming | {completed}/{len(specs)} cells already checkpointed")
     if pending:
         workers = _worker_count(len(pending), max_workers)
-        logger.info(f"  running | {len(pending)} tuning cells | {workers} worker(s)")
+        logger.info(f"⚙️ run | {len(pending)} pending cells | {workers} worker(s) resolved")
         if workers == 1:
             for spec in pending:
                 cell_id, rows, elapsed = _run_cell_spec(config, spec)
-                _write_part(parts_dir, cell_id, rows)
+                store.put(cell_id, rows)
                 completed += 1
                 logger.info(
                     f"  cell {completed}/{len(specs)} | "
@@ -489,7 +532,7 @@ def run_study(
                 for future in as_completed(futures):
                     spec = futures[future]
                     cell_id, rows, elapsed = future.result()
-                    _write_part(parts_dir, cell_id, rows)
+                    store.put(cell_id, rows)
                     completed += 1
                     logger.info(
                         f"  cell {completed}/{len(specs)} | "
@@ -497,15 +540,14 @@ def run_study(
                         f"cloud={spec.cloud_size} reg={spec.regularization} repeat={spec.repeat} | "
                         f"{elapsed:.1f}s"
                     )
-    frames = _read_parts(parts_dir, specs)
-    return _finalize_study(config, frames)
+    return _finalize_study(config, store.read_frames())
 
 
 def derive_study_status(config: TuningStudyConfig, checks: dict[str, bool]) -> tuple[str, list[str]]:
     failed = sorted(name for name, passed in checks.items() if not passed)
     if failed:
         return "failed", failed
-    if config.mode.name == "fast":
+    if config.mode.name != "audit":  # fast + sweep are provisional evidence, not decision-freezing
         return "provisional", []
     pending = []
     if config.multiresolution_decision == "pending":
@@ -517,6 +559,215 @@ def derive_study_status(config: TuningStudyConfig, checks: dict[str, bool]) -> t
     return ("frozen", []) if not pending else ("incomplete", pending)
 
 
+def _best_location_gain(characterization: Any) -> float:
+    """Apparent SNR proxy: the best held-out gain any learner achieves on the conditional mean.
+
+    This is 'how learnable is this task by the map family' — the operationally correct target for a
+    prior, and (unlike generative SNR) directly measurable, since generative SNR is confounded with
+    map-incompleteness."""
+    best = float("-inf")
+    for coord, value in zip(characterization.coordinates, characterization.raw_values, strict=True):
+        if coord.statistic == "gain" and coord.target == "location":
+            best = max(best, float(value))
+    return best if best != float("-inf") else float("nan")
+
+
+def _real_best_location_gains(characterization_dir: Path) -> list[float]:
+    gains: list[float] = []
+    for path in sorted(characterization_dir.glob("*mode_audit*/coordinates.parquet")):
+        if "synthetic" in path.parent.name:  # the real reference must exclude the synthetic baseline arm
+            continue
+        frame = pl.read_parquet(path)
+        raw = frame.filter(
+            (pl.col("representation") == "raw")
+            & (pl.col("statistic") == "gain")
+            & (pl.col("target") == "location")
+            & pl.col("valid")
+        )
+        if raw.is_empty():
+            continue
+        raw = raw.filter(pl.col("row_budget") == raw["row_budget"].max())
+        gains.append(float(raw["value"].max()))  # ty:ignore[invalid-argument-type]
+    return gains
+
+
+def apparent_snr_report(
+    config: TuningStudyConfig,
+    project_root: Path,
+    *,
+    n_tasks: int = 64,
+    characterization_dir: Path | None = None,
+) -> dict[str, Any]:
+    """One-time calibration diagnostic: does the baseline prior's apparent-SNR (best location gain)
+    distribution match the real corpus? This is how SNR-as-cleanliness is handled — by matching the
+    distribution as fixed config, not by tuning a non-identifiable knob."""
+    baseline_eta = build_hyperprior(config.tuning.prior)
+    char_raw = config.tuning.characterization.model_copy(update={"representation": "raw"})
+    shape = CharacterizationShape(
+        config.mode.n_probe_fit, config.mode.n_probe_score, config.mode.n_features, 0, "regression"
+    )
+    streams = RandomStreams(config.tuning.seed)
+    synthetic: list[float] = []
+    for index in range(n_tasks):
+        task = sample_task(baseline_eta, shape, streams, "apparent-snr", index, "synthetic", index).tuning
+        gain = _best_location_gain(characterize_task(task, char_raw, "full", random_identity=("apparent-snr", index)))
+        if gain == gain:  # drop NaN
+            synthetic.append(gain)
+    real = _real_best_location_gains(characterization_dir or (project_root / "benchmarks/results/characterization"))
+
+    def quantiles(values: list[float]) -> dict[str, float] | None:
+        return {str(p): float(np.quantile(values, p)) for p in (0.1, 0.5, 0.9)} if values else None
+
+    report: dict[str, Any] = {
+        "n_synthetic": len(synthetic),
+        "n_real": len(real),
+        "synthetic_mean": float(np.mean(synthetic)) if synthetic else None,
+        "real_mean": float(np.mean(real)) if real else None,
+        "synthetic_quantiles": quantiles(synthetic),
+        "real_quantiles": quantiles(real),
+    }
+    if synthetic and real:
+        grid = np.sort(np.concatenate([synthetic, real]))
+        cdf_synth = np.searchsorted(np.sort(synthetic), grid, side="right") / len(synthetic)
+        cdf_real = np.searchsorted(np.sort(real), grid, side="right") / len(real)
+        report["ks_statistic"] = float(np.max(np.abs(cdf_synth - cdf_real)))
+        report["mean_gap_real_minus_synthetic"] = float(np.mean(real) - np.mean(synthetic))
+    return report
+
+
+def _md_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, float):
+        if not np.isfinite(value):
+            return ""
+        return "0" if value == 0.0 else f"{value:.4f}".rstrip("0").rstrip(".")
+    return str(value).replace("|", "\\|")
+
+
+def _md_table(rows: list[dict[str, Any]], columns: tuple[tuple[str, str], ...]) -> str:
+    if not rows:
+        return "_No rows._"
+    header = "| " + " | ".join(label for _, label in columns) + " |"
+    separator = "| " + " | ".join("---" for _ in columns) + " |"
+    body = ["| " + " | ".join(_md_value(row.get(key)) for key, _ in columns) + " |" for row in rows]
+    return "\n".join([header, separator, *body])
+
+
+def _identifiability_rows(config: TuningStudyConfig, recovery: pl.DataFrame) -> list[dict[str, Any]]:
+    """Per (objective, scenario): mean planted loss-reduction, its repeat SD, S/N, and recovery error.
+    A knob is identifiable when its S/N clears ~1 with small parameter_error; `base` is the control."""
+    needed = {"objective", "scenario", "fresh_seed_loss_reduction", "parameter_error", "movement_from_base"}
+    if recovery.is_empty() or not needed.issubset(set(recovery.columns)):
+        return []
+    rows = (
+        recovery.group_by("objective", "scenario")
+        .agg(
+            pl.col("fresh_seed_loss_reduction").mean().alias("mean_loss_red"),
+            pl.col("fresh_seed_loss_reduction").std(ddof=0).alias("sd_loss_red"),
+            pl.col("parameter_error").mean().alias("mean_param_err"),
+            pl.col("movement_from_base").mean().alias("mean_move"),
+            pl.len().alias("n"),
+        )
+        .to_dicts()
+    )
+    order = ["base", *config.planted_knobs]
+    for row in rows:
+        sd = row["sd_loss_red"]
+        row["sn"] = row["mean_loss_red"] / sd if sd and sd > 1e-12 else None
+    rows.sort(key=lambda row: (str(row["objective"]), order.index(row["scenario"]) if row["scenario"] in order else 99))
+    return rows
+
+
+def build_tuning_summary_markdown(
+    config: TuningStudyConfig, result: dict[str, Any], apparent_snr: dict[str, Any]
+) -> str:
+    decision = result["decision"]
+    evidence = result["evidence"]
+    ident = _identifiability_rows(config, result["recovery"])
+    scenarios = _scenarios(config)
+    cells = (
+        len(_REPRESENTATIONS)
+        * len(_OBJECTIVES)
+        * len(scenarios)
+        * len(config.mode.cloud_sizes)
+        * len(config.mode.regularization_policies)
+        * config.mode.repeats
+    )
+    headline = [
+        f"Status: **{decision['status']}**.",
+        f"Mode: **{config.mode.name}** — {cells} cells "
+        f"(cloud {list(config.mode.cloud_sizes)}, reg {list(config.mode.regularization_policies)}, "
+        f"{config.mode.repeats} repeats, {config.mode.n_features} features).",
+        f"Planted knobs: {', '.join(config.planted_knobs)}.",
+    ]
+    if evidence.get("median_base_movement") is not None:
+        headline.append(f"Median `base` movement: **{_md_value(evidence['median_base_movement'])}** (want ≈ 0).")
+    planted = [row for row in ident if row["scenario"] != "base" and row["sn"] is not None]
+    if planted:
+        top = max(planted, key=lambda row: row["sn"])
+        headline.append(
+            f"Most-identifiable knob: **{top['scenario']}** ({top['objective']}, S/N "
+            f"{_md_value(top['sn'])}, param error {_md_value(top['mean_param_err'])})."
+        )
+    if apparent_snr.get("synthetic_mean") is not None and apparent_snr.get("real_mean") is not None:
+        headline.append(
+            f"Apparent-SNR coverage: synthetic mean **{_md_value(apparent_snr['synthetic_mean'])}** vs "
+            f"real **{_md_value(apparent_snr['real_mean'])}** (KS {_md_value(apparent_snr.get('ks_statistic'))})."
+        )
+    if evidence.get("total_failures") is not None:
+        headline.append(f"Cloud-member failures: {evidence['total_failures']}.")
+
+    gate_rows = [{"check": name, "passed": passed} for name, passed in sorted(evidence.get("checks", {}).items())]
+    snr_rows = [
+        {"metric": "n tasks", "synthetic": apparent_snr.get("n_synthetic"), "real": apparent_snr.get("n_real")},
+        {"metric": "mean", "synthetic": apparent_snr.get("synthetic_mean"), "real": apparent_snr.get("real_mean")},
+    ]
+    for label, key in (("q10", "0.1"), ("q50", "0.5"), ("q90", "0.9")):
+        sq = (apparent_snr.get("synthetic_quantiles") or {}).get(key)
+        rq = (apparent_snr.get("real_quantiles") or {}).get(key)
+        snr_rows.append({"metric": label, "synthetic": sq, "real": rq})
+
+    sections = [
+        "# Tuning Recovery Study Summary",
+        "",
+        "## Headline",
+        *[f"- {item}" for item in headline],
+        "",
+        "## Knob Identifiability",
+        "_Per objective x scenario, aggregated over repeats+representations. `sn` = mean loss-reduction /"
+        " its SD (recoverable when ~ 1); `mean_param_err` = ‖selected - planted‖ (small = recovered);"
+        " `mean_move` = ‖selected - base‖. The `base` row is the no-planted-shift control._",
+        "",
+        _md_table(
+            ident,
+            (
+                ("objective", "Objective"),
+                ("scenario", "Scenario"),
+                ("mean_loss_red", "Mean loss-red"),
+                ("sd_loss_red", "SD"),
+                ("sn", "S/N"),
+                ("mean_param_err", "Param err"),
+                ("mean_move", "Move from base"),
+                ("n", "n"),
+            ),
+        ),
+        "",
+        "## Apparent-SNR Calibration",
+        "_Best location gain (how learnable the mean is by the map family). Synthetic = baseline prior;"
+        " real = Step-2 frozen corpus. A large gap/KS means the prior mis-covers real learnability._",
+        "",
+        _md_table(snr_rows, (("metric", "Metric"), ("synthetic", "Synthetic"), ("real", "Real"))),
+        "",
+        "## Gate Checks",
+        _md_table(gate_rows, (("check", "Check"), ("passed", "Passed"))),
+        "",
+    ]
+    return "\n".join(sections)
+
+
 def write_study_artifacts(
     config: TuningStudyConfig,
     project_root: Path,
@@ -526,13 +777,19 @@ def write_study_artifacts(
     destination = output or (project_root / config.mode.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     configure_study_logging(destination, study="tuning")
-    result = run_study(config, parts_dir=destination / "parts")
+    result = run_study(config, checkpoint_path=destination / "checkpoints.sqlite")
     for name in ("evaluations", "candidates", "failure_events", "rank_stability", "recovery"):
         result[name].write_parquet(destination / f"{name}.parquet")
     (destination / "config.json").write_text(json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True))
     (destination / "evidence.json").write_text(json.dumps(result["evidence"], indent=2, sort_keys=True))
     (destination / "decision_log.json").write_text(json.dumps(result["decision"], indent=2, sort_keys=True))
+    logger.info("📐 apparent-SNR calibration | characterizing baseline-prior tasks")
+    apparent_snr = apparent_snr_report(config, project_root)
+    (destination / "apparent_snr.json").write_text(json.dumps(apparent_snr, indent=2, sort_keys=True))
+    (destination / "summary.md").write_text(build_tuning_summary_markdown(config, result, apparent_snr))
     (destination / "environment.json").write_text(
         json.dumps(environment_provenance(project_root), indent=2, sort_keys=True)
     )
-    return {"status": result["decision"]["status"], "evaluations": result["evaluations"].height}
+    status = result["decision"]["status"]
+    logger.success(f"✅ tuning recovery complete | status={status} | artifacts → {destination}")
+    return {"status": status, "evaluations": result["evaluations"].height}
