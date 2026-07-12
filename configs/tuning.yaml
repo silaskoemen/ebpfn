@@ -6,7 +6,7 @@ tuning:
   seed: 0
   characterization:
     row_budgets:
-      minimum: 64
+      minimum: 256
       spacing: geometric
       weight: uniform
       feature_view: frozen

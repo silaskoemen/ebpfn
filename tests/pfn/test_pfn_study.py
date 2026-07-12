@@ -35,6 +35,13 @@ def _config() -> PfnStudyConfig:
     )
 
 
+def test_default_output_grid_is_the_frozen_256_bin_protocol() -> None:
+    arch = PfnArchConfig()
+    assert arch.n_bins == 256
+    assert arch.target_inner_bound == 5.0
+    assert arch.target_tail_scale == 1.0
+
+
 def test_write_study_artifacts_emits_expected_files(tmp_path: Path) -> None:
     result = write_study_artifacts(_config(), project_root=tmp_path, output=tmp_path / "pfn")
     assert result["steps"] == 6

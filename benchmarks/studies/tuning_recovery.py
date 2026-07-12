@@ -14,7 +14,7 @@ import polars as pl
 from benchmarks.studies.study_logging import configure_study_logging
 from ebpfn.cache import EvaluationCache
 from ebpfn.config import TuningConfig, TuningStudyConfig
-from ebpfn.data import CharacterizationShape
+from ebpfn.data import CharacterizationShape, content_hash
 from ebpfn.priors import EtaVectorizer, HyperPrior, build_hyperprior, sample_task
 from ebpfn.tune import CandidateRecord, EvaluationResult, characterize_task, evaluate_candidate, make_panel, run_search
 from ebpfn.utils import RandomStreams, environment_provenance
@@ -209,6 +209,10 @@ def _rows_to_frames(rows: _StudyRows) -> dict[str, pl.DataFrame]:
     }
 
 
+def _checkpoint_identity(config: TuningStudyConfig) -> str:
+    return content_hash(config.model_dump(mode="json"), namespace="tuning-study-checkpoint-1")
+
+
 class _CellStore:
     """Single-file SQLite checkpoint: one JSON payload per completed cell, keyed by cell_id.
 
@@ -217,11 +221,22 @@ class _CellStore:
     ``as_completed`` loop persists them), so a single connection per call needs no locking.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, config_identity: str) -> None:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS cells (cell_id INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            stored = connection.execute("SELECT value FROM metadata WHERE key = 'config_identity'").fetchone()
+            if stored is None:
+                if connection.execute("SELECT EXISTS(SELECT 1 FROM cells)").fetchone()[0]:
+                    raise ValueError("existing tuning checkpoint has no config identity; start a fresh checkpoint")
+                connection.execute(
+                    "INSERT INTO metadata(key, value) VALUES ('config_identity', ?)",
+                    (config_identity,),
+                )
+            elif stored[0] != config_identity:
+                raise ValueError("tuning checkpoint config does not match the resolved study config")
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
@@ -506,7 +521,7 @@ def run_study(
             _extend_rows(rows, cell_rows)
         return _finalize_study(config, _rows_to_frames(rows))
 
-    store = _CellStore(checkpoint_path)
+    store = _CellStore(checkpoint_path, _checkpoint_identity(config))
     done = store.completed_ids()
     pending = [spec for spec in specs if spec.cell_id not in done]
     completed = len(specs) - len(pending)

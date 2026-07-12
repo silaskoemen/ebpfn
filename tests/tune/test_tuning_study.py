@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import polars as pl
+import pytest
 from benchmarks.studies import tuning_recovery
 from ebpfn.config import TuningStudyConfig
 from hydra import compose, initialize_config_dir
@@ -21,6 +22,7 @@ def test_tuning_study_configuration_is_strict_and_resolved():
     config = _config()
     assert config.mode.name == "fast"
     assert config.tuning.search.optimizer == "none"
+    assert config.tuning.characterization.row_budgets.minimum == 256
     assert config.mode.cloud_sizes == (8,)
 
 
@@ -107,7 +109,7 @@ def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
         )
 
     checkpoint_path = tmp_path / "checkpoints.sqlite"
-    tuning_recovery._CellStore(checkpoint_path).put(0, rows(0))
+    tuning_recovery._CellStore(checkpoint_path, tuning_recovery._checkpoint_identity(config)).put(0, rows(0))
     called = []
 
     def run_cell_spec(_, spec):
@@ -122,3 +124,13 @@ def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
 
     assert called == [1]
     assert result["evaluations"]["repeat"].to_list() == [0, 1]
+
+
+def test_checkpoint_rejects_a_different_study_config(tmp_path):
+    config = _config()
+    checkpoint_path = tmp_path / "checkpoints.sqlite"
+    tuning_recovery._CellStore(checkpoint_path, tuning_recovery._checkpoint_identity(config))
+    changed = config.model_copy(update={"planted_unit_shift": 0.3})
+
+    with pytest.raises(ValueError, match="does not match"):
+        tuning_recovery._CellStore(checkpoint_path, tuning_recovery._checkpoint_identity(changed))
