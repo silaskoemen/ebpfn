@@ -10,23 +10,7 @@ from typing import Any
 
 from ebpfn.characterize import TaskCharacterization
 from ebpfn.data import TuningTask
-from ebpfn.priors import BnnHyperPrior, CompositionalHyperPrior, HyperPrior, ScmHyperPrior, TreeHyperPrior
-
-
-def _eta_from_dict(payload: dict[str, Any]) -> HyperPrior:
-    return HyperPrior(
-        generator_weights={str(name): float(weight) for name, weight in payload["generator_weights"].items()},
-        corr_strength_mean=payload["corr_strength_mean"],
-        log_snr_mean=payload["log_snr_mean"],
-        heteroskedastic_rate=payload["heteroskedastic_rate"],
-        heavy_tail_rate=payload["heavy_tail_rate"],
-        snr_dispersion=payload["snr_dispersion"],
-        corr_dispersion=payload["corr_dispersion"],
-        scm=ScmHyperPrior(**payload["scm"]),
-        bnn=BnnHyperPrior(**payload["bnn"]),
-        tree=TreeHyperPrior(**payload["tree"]),
-        compositional=CompositionalHyperPrior(**payload["compositional"]),
-    )
+from ebpfn.priors import HyperPrior, hyperprior_from_dict, hyperprior_to_dict
 
 
 @dataclass(frozen=True)
@@ -114,7 +98,7 @@ class EvaluationResult:
             "failure_events": [event.to_payload() for event in self.failure_events],
             "runtime_s": self.runtime_s,
             "candidate_vector": list(self.candidate_vector),
-            "eta": dataclasses.asdict(self.eta),
+            "eta": hyperprior_to_dict(self.eta),
             "stage": self.stage,
             "fidelity": self.fidelity,
             "seeds": self.seeds,
@@ -131,7 +115,7 @@ class EvaluationResult:
             failure_events=tuple(FailureEvent.from_payload(event) for event in payload["failure_events"]),
             runtime_s=float(payload["runtime_s"]),
             candidate_vector=tuple(float(value) for value in payload["candidate_vector"]),
-            eta=_eta_from_dict(payload["eta"]),
+            eta=hyperprior_from_dict(payload["eta"]),
             stage=str(payload["stage"]),
             fidelity=str(payload["fidelity"]),
             seeds=payload["seeds"],

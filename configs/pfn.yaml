@@ -1,0 +1,36 @@
+defaults:
+  - _self_
+  - pfn_mode: fast
+
+arch:
+  n_bins: 256
+  target_inner_bound: 5.0
+  target_tail_scale: 1.0
+  embed_dim: 128
+  col_num_blocks: 3
+  row_num_blocks: 3
+  icl_num_blocks: 12
+  col_nhead: 8
+  row_nhead: 8
+  icl_nhead: 8
+  feature_group_size: 3
+  n_cls_cols: 4
+  n_cls_rows: 128
+  max_context: 4096
+
+train:
+  seed: 0
+  steps: 1000
+  tasks_per_step: 16
+  lr: 3e-4
+  weight_decay: 0.01
+  warmup_steps: 100
+  grad_clip: 1.0
+  device: auto
+  checkpoint_interval: 200
+  anchor_probe_fit: 512
+  anchor_probe_score: 128
+  anchor_features: 100
+
+decision_owner: ebpfn-v1
+decision_date: "2026-07-12"

@@ -18,6 +18,12 @@ from ebpfn.config.data import (
     RotationConfig,
     SplitConfig,
 )
+from ebpfn.config.pfn import (
+    PfnArchConfig,
+    PfnStudyConfig,
+    PfnStudyModeConfig,
+    PfnTrainConfig,
+)
 from ebpfn.config.prior import (
     BnnRouteConfig,
     CompositionalRouteConfig,
@@ -54,6 +60,10 @@ __all__ = [
     "HyperPriorConfig",
     "MapConfig",
     "OpenMLConfig",
+    "PfnArchConfig",
+    "PfnStudyConfig",
+    "PfnStudyModeConfig",
+    "PfnTrainConfig",
     "PrepareDataConfig",
     "PreprocessingConfig",
     "PriorStudyConfig",

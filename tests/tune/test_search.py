@@ -1,7 +1,16 @@
 import numpy as np
 import pytest
 from ebpfn.cache import EvaluationCache
-from ebpfn.config import CacheConfig, CloudConfig, HyperPriorConfig, SearchConfig, TuningConfig
+from ebpfn.config import (
+    CacheConfig,
+    CharacterizationConfig,
+    CloudConfig,
+    HyperPriorConfig,
+    MapConfig,
+    RowBudgetConfig,
+    SearchConfig,
+    TuningConfig,
+)
 from ebpfn.data import CharacterizationShape
 from ebpfn.priors import EtaVectorizer, build_hyperprior, sample_cloud
 from ebpfn.tune import run_search
@@ -12,26 +21,33 @@ def _real_tasks(n_tasks: int = 2, seed: int = 0):
     streams = RandomStreams(seed)
     eta = build_hyperprior(HyperPriorConfig())
     return [
-        sample_cloud(eta, CharacterizationShape(300, 140, 5, 0, "regression"), 1, streams, "real", i)[0].tuning
+        sample_cloud(eta, CharacterizationShape(64, 32, 5, 0, "regression"), 1, streams, "real", i)[0].tuning
         for i in range(n_tasks)
     ]
 
 
 def _config(**search_overrides) -> TuningConfig:
     search = SearchConfig(
-        sobol_candidates=6,
-        retain_strong=3,
-        retain_diverse=2,
-        de_maxiter=2,
-        de_popsize=3,
+        sobol_candidates=2,
+        retain_strong=1,
+        retain_diverse=1,
+        de_maxiter=1,
+        de_popsize=1,
         de_fidelity="min",
-        selection_panel_size=2,
+        selection_panel_size=1,
         **search_overrides,
     )
     # Default cache off so tests that omit a cache do not write under the repo;
     # tests that exercise caching override the cache subconfig explicitly.
     return TuningConfig(
-        objective="energy", cloud=CloudConfig(n_members=6), search=search, cache=CacheConfig(enabled=False)
+        objective="energy",
+        characterization=CharacterizationConfig(
+            row_budgets=RowBudgetConfig(minimum=32),
+            maps=MapConfig(max_products=8, max_conjunctions=8, max_rff=16, rff_distance_rows=64),
+        ),
+        cloud=CloudConfig(n_members=2),
+        search=search,
+        cache=CacheConfig(enabled=False),
     )
 
 

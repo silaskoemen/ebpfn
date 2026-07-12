@@ -15,6 +15,9 @@ explore/*
 **/*.db
 outputs/*
 
+# Claude
+.claude/*
+
 # Hydra run outputs
 multirun/
 

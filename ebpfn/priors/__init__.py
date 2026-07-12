@@ -11,6 +11,8 @@ from ebpfn.priors.contracts import (
     ScmHyperPrior,
     SharedTheta,
     TreeHyperPrior,
+    hyperprior_from_dict,
+    hyperprior_to_dict,
 )
 from ebpfn.priors.generate import build_hyperprior, sample_cloud, sample_task
 from ebpfn.priors.shapes import sample_training_shape
@@ -30,6 +32,8 @@ __all__ = [
     "SharedTheta",
     "TreeHyperPrior",
     "build_hyperprior",
+    "hyperprior_from_dict",
+    "hyperprior_to_dict",
     "sample_cloud",
     "sample_task",
     "sample_training_shape",

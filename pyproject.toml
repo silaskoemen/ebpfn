@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=2.4.6,<3",
     "polars>=1.41.2,<2",
     "pydantic>=2.12,<3",
+    "torch>=2.2,<3",
 ]
 
 [project.optional-dependencies]

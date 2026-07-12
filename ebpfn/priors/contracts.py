@@ -7,7 +7,7 @@ route, parameters, and diagnostics live on `GeneratedTask.diagnostics`, never on
 the `TuningTask` the characterizer sees.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Literal, TypeAlias
 
 import numpy as np
@@ -128,6 +128,28 @@ class HyperPrior:
 
     def weight_vector(self) -> np.ndarray:
         return np.array([self.generator_weights[name] for name in ROUTE_ORDER], dtype=float)
+
+
+def hyperprior_to_dict(eta: HyperPrior) -> dict[str, Any]:
+    """Serialize an eta for exact artifact and checkpoint handoffs."""
+    return asdict(eta)
+
+
+def hyperprior_from_dict(payload: dict[str, Any]) -> HyperPrior:
+    """Reconstruct an eta from its exact serialized representation."""
+    return HyperPrior(
+        generator_weights={str(name): float(weight) for name, weight in payload["generator_weights"].items()},
+        corr_strength_mean=payload["corr_strength_mean"],
+        log_snr_mean=payload["log_snr_mean"],
+        heteroskedastic_rate=payload["heteroskedastic_rate"],
+        heavy_tail_rate=payload["heavy_tail_rate"],
+        snr_dispersion=payload["snr_dispersion"],
+        corr_dispersion=payload["corr_dispersion"],
+        scm=ScmHyperPrior(**payload["scm"]),
+        bnn=BnnHyperPrior(**payload["bnn"]),
+        tree=TreeHyperPrior(**payload["tree"]),
+        compositional=CompositionalHyperPrior(**payload["compositional"]),
+    )
 
 
 @dataclass(frozen=True)

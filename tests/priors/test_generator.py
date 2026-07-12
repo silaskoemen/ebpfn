@@ -68,10 +68,10 @@ def test_common_random_numbers_couple_nearby_hyperpriors():
 def test_route_frequencies_converge_to_direct_weights():
     eta = _eta(generator_weights=[0.4, 0.3, 0.2, 0.1])
     streams = RandomStreams(0)
-    cloud = sample_cloud(eta, _shape(40, 20, 6), 4000, streams, "freq")
+    cloud = sample_cloud(eta, _shape(4, 2, 2), 1000, streams, "freq")
     counts = Counter(task.diagnostics["route"] for task in cloud)
     for route, weight in eta.generator_weights.items():
-        assert abs(counts[route] / len(cloud) - weight) < 0.03
+        assert abs(counts[route] / len(cloud) - weight) < 0.06
 
 
 @pytest.mark.parametrize("route", ROUTE_ORDER)

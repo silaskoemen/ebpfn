@@ -1,0 +1,30 @@
+Vendored third-party code
+=========================
+
+This directory contains a vendored copy of the NanoTabICLv2 model from:
+
+    Project:  nanotabicl (a minimal TabICLv2 implementation)
+    Source:   https://github.com/soda-inria/nanotabicl
+    Commit:   ead24e3a1bf2dcda3ec46041a5189c034b6c0a62
+    License:  BSD-3-Clause (see LICENSE in this directory)
+    Copyright (c) 2025, Soda team @ Inria
+
+Why vendored
+------------
+nanotabicl is not published to PyPI, so the model source is copied in rather than
+depended on. ebpfn uses only the transformer *backbone* (RoPE, QASSMax, column/row/
+ICL attention blocks); it trains that backbone on ebpfn's own empirical-Bayes prior.
+nanotabicl's own data-generation prior (`prior.py`) is intentionally NOT vendored.
+
+Modifications relative to upstream `model.py`
+---------------------------------------------
+The model architecture and forward pass are unchanged. Edits are limited to:
+- reformatting to this repo's style (split `import` statements, expanded one-line
+  `if`/statement bodies, `typing.Optional[int]` -> `int | None`, module docstring);
+- removal of the upstream `if __name__ == "__main__"` smoke-test demo;
+- lint/type-checker conformance: buffer type annotations on `Rope` and replacing
+  unused tuple-unpack targets with `_` (no behavioural change).
+
+The output head (`out_mlp`) is used as-is with `out_dim = n_bins`; its logits are
+interpreted as a bar (Riemann) distribution by `ebpfn/pfn/distribution.py`, not by
+this file. Upstream uses the same head for 999-quantile regression instead.

@@ -1,0 +1,11 @@
+# @package _global_
+mode:
+  name: audit
+  output_dir: benchmarks/results/pfn/audit
+  smoke_steps: 200
+  profile_rows: [256, 1024, 4096]
+  profile_features: [10, 50, 100]
+  profile_tasks: 4
+
+train:
+  steps: 200

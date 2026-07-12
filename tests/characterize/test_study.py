@@ -80,7 +80,7 @@ def test_default_output_directory_is_slugged_and_hashed(tmp_path):
 
     assert output.parent == tmp_path / config.output_root
     assert output.name.startswith(
-        "dataset_synthetic_sparse_linear__mode_fast__rows_128__features_6__repeats_1__seed_0__"
+        "dataset_synthetic_sparse_linear__mode_fast__rows_128__features_12__repeats_1__seed_0__"
     )
     assert "=" not in output.name
     assert len(output.name.rsplit("__", maxsplit=1)[1]) == 8

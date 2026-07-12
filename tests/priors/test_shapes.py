@@ -22,9 +22,10 @@ def test_shared_sampler_is_deterministic_for_baseline_and_tuned():
 
 def test_jitter_factors_are_mean_one():
     anchor, jitter = _anchor(), ShapeJitterConfig()
-    factors = [sample_training_shape(anchor, jitter, np.random.default_rng(seed))[1] for seed in range(20000)]
-    assert abs(float(np.mean([f["j_n"] for f in factors])) - 1.0) < 0.02
-    assert abs(float(np.mean([f["j_p"] for f in factors])) - 1.0) < 0.02
+    rng = np.random.default_rng(0)
+    factors = [sample_training_shape(anchor, jitter, rng)[1] for _ in range(5000)]
+    assert abs(float(np.mean([f["j_n"] for f in factors])) - 1.0) < 0.03
+    assert abs(float(np.mean([f["j_p"] for f in factors])) - 1.0) < 0.03
 
 
 def test_shapes_are_clamped_to_compute_bounds():

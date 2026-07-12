@@ -22,6 +22,7 @@ loguru = ">=0.7.3,<0.8"
 numpy = ">=2.4.6,<3"
 polars = ">=1.41.2,<2"
 pydantic = ">=2.12,<3"
+pytorch = ">=2.2"
 
 [pypi-dependencies]
 ebpfn = { path = ".", editable = true }

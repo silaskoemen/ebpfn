@@ -1,3 +1,4 @@
+import subprocess
 import sys
 
 import numpy as np
@@ -70,14 +71,34 @@ def test_stages_are_disjoint_but_reproducible():
     assert search_total != pytest.approx(audit_total)  # disjoint across stages
 
 
+_BOUNDARY_SCRIPT = """
+import sys
+
+from ebpfn.config import CloudConfig, HyperPriorConfig, TuningConfig
+from ebpfn.data import CharacterizationShape
+from ebpfn.priors import build_hyperprior, sample_cloud
+from ebpfn.tune import RealTarget, characterize_task, evaluate_candidate, make_panel
+from ebpfn.utils import RandomStreams
+
+streams = RandomStreams(4)
+eta = build_hyperprior(HyperPriorConfig())
+task = sample_cloud(eta, CharacterizationShape(300, 140, 5, 0, "regression"), 1, streams, "real", 0)[0].tuning
+config = TuningConfig(objective="energy", cloud=CloudConfig(n_members=4))
+targets = [RealTarget(task, characterize_task(task, config.characterization, "min"))]
+run_streams = RandomStreams(6)
+panel = make_panel("search", 0, config, run_streams)
+evaluate_candidate(eta, targets, config, run_streams, panel, "min")
+imported = sorted(n for n in sys.modules if n == "ebpfn.pfn" or n.startswith("ebpfn.pfn."))
+assert not imported, f"evaluation imported PFN modules: {imported}"
+"""
+
+
 def test_evaluation_does_not_import_the_pfn_subsystem():
-    tasks = _real_tasks(seed=4)
-    config = TuningConfig(objective="energy", cloud=CloudConfig(n_members=4))
-    streams = RandomStreams(6)
-    eta = build_hyperprior(HyperPriorConfig())
-    panel = make_panel("search", 0, config, streams)
-    evaluate_candidate(eta, _targets(tasks, config, "min"), config, streams, panel, "min")
-    assert not any(name == "ebpfn.pfn" or name.startswith("ebpfn.pfn.") for name in sys.modules)
+    # Run in a clean interpreter: other tests import ebpfn.pfn, so a shared-process
+    # sys.modules check is unreliable. This verifies the evaluation path itself never
+    # pulls in the PFN subsystem, keeping candidate evaluation likelihood-free.
+    completed = subprocess.run([sys.executable, "-c", _BOUNDARY_SCRIPT], capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_cache_hit_returns_an_equal_result(tmp_path):
