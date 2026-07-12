@@ -31,9 +31,6 @@ from ebpfn.utils import RandomStreams
 
 from .contracts import EvaluationResult, FailureEvent, Panel, RealTarget
 
-# Soft penalty scale for the optional D3 trust-region regularization.
-_TRUST_REGION_PENALTY = 1.0e3
-
 
 def characterize_task(
     task: TuningTask,
@@ -314,12 +311,10 @@ def _apply_regularization(
     n_tasks: int,
 ) -> float:
     policy = config.search.single_task_regularization
-    if policy != "trust_region" or n_tasks != 1 or baseline_vector is None or not vector:
+    if policy != "prior_distance" or n_tasks != 1 or baseline_vector is None or not vector:
         return total
-    radius = config.search.trust_region_radius
-    if radius is None:
-        raise ValueError("trust_region regularization requires a configured radius")
+    penalty = config.search.prior_distance_penalty
+    if penalty is None:
+        raise ValueError("prior_distance regularization requires a configured penalty")
     distance = float(np.linalg.norm(np.asarray(vector) - np.asarray(baseline_vector)))
-    if distance <= radius:
-        return total
-    return total + _TRUST_REGION_PENALTY * (distance - radius)
+    return total + penalty * distance**2

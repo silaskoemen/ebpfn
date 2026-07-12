@@ -42,7 +42,7 @@ def evaluation_cache_key(
             "search": config.search.model_copy(
                 update={
                     "single_task_regularization": "none",
-                    "trust_region_radius": None,
+                    "prior_distance_penalty": None,
                     "competitive_tolerance": None,
                 }
             )

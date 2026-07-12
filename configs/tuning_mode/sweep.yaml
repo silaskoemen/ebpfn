@@ -10,4 +10,4 @@ n_probe_score: 256
 n_features: 20
 n_real_tasks: 1
 cloud_sizes: [256]
-regularization_policies: [trust_region]
+regularization_policies: [prior_distance]

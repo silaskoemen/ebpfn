@@ -32,22 +32,27 @@ def test_status_requires_audit_decisions():
     assert tuning_recovery.derive_study_status(fast, checks) == ("provisional", [])
 
     audit = _config("audit")
-    status, missing = tuning_recovery.derive_study_status(audit, checks)
-    assert status == "incomplete"
-    assert set(missing) == {
-        "multiresolution_decision",
-        "synthetic_failure_decision",
-        "single_task_regularization_decision",
-    }
+    assert tuning_recovery.derive_study_status(audit, checks) == (
+        "incomplete",
+        ["single_task_regularization_decision"],
+    )
+    resolved = audit.model_copy(update={"single_task_regularization_decision": "prior_distance"})
+    assert tuning_recovery.derive_study_status(resolved, checks) == ("frozen", [])
 
-    resolved = audit.model_copy(
+
+def test_checkpoint_identity_excludes_decision_and_output_metadata():
+    config = _config("audit")
+    changed_metadata = config.model_copy(
         update={
-            "multiresolution_decision": "characterization-audit-1",
-            "synthetic_failure_decision": "raise",
-            "single_task_regularization_decision": "none",
+            "decision_date": "2099-01-01",
+            "single_task_regularization_decision": "pending",
+            "mode": config.mode.model_copy(update={"output_dir": "somewhere/else"}),
         }
     )
-    assert tuning_recovery.derive_study_status(resolved, checks) == ("frozen", [])
+    assert tuning_recovery._checkpoint_identity(changed_metadata) == tuning_recovery._checkpoint_identity(config)
+
+    changed_penalty = config.model_copy(update={"prior_distance_penalty": 0.09})
+    assert tuning_recovery._checkpoint_identity(changed_penalty) != tuning_recovery._checkpoint_identity(config)
 
 
 def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):

@@ -4,6 +4,10 @@ defaults:
 
 tuning:
   seed: 0
+  active:
+    - corr_strength_mean
+    - heteroskedastic_rate
+    - scm_target_indegree_mean
   characterization:
     row_budgets:
       minimum: 256
@@ -27,7 +31,8 @@ tuning:
     de_popsize: 8
     de_fidelity: min
     selection_panel_size: 2
-    single_task_regularization: none
+    single_task_regularization: prior_distance
+    prior_distance_penalty: 0.08
     competitive_tolerance: null
   cache:
     enabled: true
@@ -35,10 +40,14 @@ tuning:
     cache_version: tuning-cache-3
 
 planted_unit_shift: 0.25
-trust_region_radius: 0.5
+planted_knobs:
+  - corr_strength_mean
+  - heteroskedastic_rate
+  - scm_target_indegree_mean
+prior_distance_penalty: 0.08
 competitive_tolerance: 0.02
 decision_owner: ebpfn-v1
-decision_date: "2026-07-07"
-multiresolution_decision: pending
-synthetic_failure_decision: pending
+decision_date: "2026-07-12"
+multiresolution_decision: geometric_uniform_frozen_minimum_256
+synthetic_failure_decision: raise
 single_task_regularization_decision: pending

@@ -92,8 +92,8 @@ class SearchConfig(StrictConfigModel):
     de_popsize: int = 15
     de_fidelity: Literal["min", "full"] = "min"
     selection_panel_size: int = 3
-    single_task_regularization: Literal["none", "trust_region", "closest_to_baseline"] = "none"  # D3 hook
-    trust_region_radius: float | None = None
+    single_task_regularization: Literal["none", "prior_distance", "closest_to_baseline"] = "none"  # D3 hook
+    prior_distance_penalty: float | None = None
     competitive_tolerance: float | None = None
 
     @model_validator(mode="after")
@@ -104,9 +104,9 @@ class SearchConfig(StrictConfigModel):
             raise ValueError("differential-evolution schedule values must be positive")
         if self.selection_panel_size < 1:
             raise ValueError("selection panel size must be at least one")
-        if self.single_task_regularization == "trust_region":
-            if self.trust_region_radius is None or self.trust_region_radius <= 0.0:
-                raise ValueError("trust_region regularization requires a positive radius")
+        if self.single_task_regularization == "prior_distance":
+            if self.prior_distance_penalty is None or self.prior_distance_penalty <= 0.0:
+                raise ValueError("prior_distance regularization requires a positive penalty")
         if self.single_task_regularization == "closest_to_baseline":
             if self.competitive_tolerance is None or self.competitive_tolerance <= 0.0:
                 raise ValueError("closest_to_baseline regularization requires a positive competitive tolerance")
@@ -175,7 +175,7 @@ class TuningStudyModeConfig(StrictConfigModel):
     n_features: int
     n_real_tasks: int
     cloud_sizes: tuple[int, ...]
-    regularization_policies: tuple[Literal["none", "trust_region", "closest_to_baseline"], ...]
+    regularization_policies: tuple[Literal["none", "prior_distance", "closest_to_baseline"], ...]
 
     @field_validator("cloud_sizes", mode="before")
     @classmethod
@@ -222,13 +222,13 @@ class TuningStudyConfig(StrictConfigModel):
         "corr_strength_mean",
     )
     planted_unit_shift: float = 0.25
-    trust_region_radius: float = 0.5
+    prior_distance_penalty: float = 0.08
     competitive_tolerance: float = 0.02
     decision_owner: str
     decision_date: str
     multiresolution_decision: str = "pending"
     synthetic_failure_decision: Literal["pending", "raise", "exclude"] = "pending"
-    single_task_regularization_decision: Literal["pending", "none", "trust_region", "closest_to_baseline"] = "pending"
+    single_task_regularization_decision: Literal["pending", "none", "prior_distance", "closest_to_baseline"] = "pending"
 
     @field_validator("planted_knobs", mode="before")
     @classmethod
@@ -239,7 +239,7 @@ class TuningStudyConfig(StrictConfigModel):
     def validate_values(self) -> "TuningStudyConfig":
         if (
             not 0.0 < self.planted_unit_shift < 1.0
-            or self.trust_region_radius <= 0.0
+            or self.prior_distance_penalty <= 0.0
             or self.competitive_tolerance <= 0.0
         ):
             raise ValueError("planted_unit_shift must be in (0, 1) and regularization thresholds positive")

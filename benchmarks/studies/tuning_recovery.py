@@ -54,7 +54,7 @@ def _cell_config(
     search = config.tuning.search.model_copy(
         update={
             "single_task_regularization": regularization,
-            "trust_region_radius": config.trust_region_radius if regularization == "trust_region" else None,
+            "prior_distance_penalty": (config.prior_distance_penalty if regularization == "prior_distance" else None),
             "competitive_tolerance": (
                 config.competitive_tolerance if regularization == "closest_to_baseline" else None
             ),
@@ -210,7 +210,17 @@ def _rows_to_frames(rows: _StudyRows) -> dict[str, pl.DataFrame]:
 
 
 def _checkpoint_identity(config: TuningStudyConfig) -> str:
-    return content_hash(config.model_dump(mode="json"), namespace="tuning-study-checkpoint-1")
+    payload = config.model_dump(mode="json")
+    for field in (
+        "decision_owner",
+        "decision_date",
+        "multiresolution_decision",
+        "synthetic_failure_decision",
+        "single_task_regularization_decision",
+    ):
+        payload.pop(field)
+    payload["mode"].pop("output_dir")
+    return content_hash(payload, namespace="tuning-study-checkpoint-2")
 
 
 class _CellStore:
@@ -672,13 +682,22 @@ def _md_table(rows: list[dict[str, Any]], columns: tuple[tuple[str, str], ...]) 
 
 
 def _identifiability_rows(config: TuningStudyConfig, recovery: pl.DataFrame) -> list[dict[str, Any]]:
-    """Per (objective, scenario): mean planted loss-reduction, its repeat SD, S/N, and recovery error.
-    A knob is identifiable when its S/N clears ~1 with small parameter_error; `base` is the control."""
-    needed = {"objective", "scenario", "fresh_seed_loss_reduction", "parameter_error", "movement_from_base"}
+    """Per policy/objective/scenario recovery signal, noise, movement, and error.
+
+    A knob is identifiable when its S/N clears ~1 with small parameter error; `base` is the control.
+    """
+    needed = {
+        "regularization",
+        "objective",
+        "scenario",
+        "fresh_seed_loss_reduction",
+        "parameter_error",
+        "movement_from_base",
+    }
     if recovery.is_empty() or not needed.issubset(set(recovery.columns)):
         return []
     rows = (
-        recovery.group_by("objective", "scenario")
+        recovery.group_by("regularization", "objective", "scenario")
         .agg(
             pl.col("fresh_seed_loss_reduction").mean().alias("mean_loss_red"),
             pl.col("fresh_seed_loss_reduction").std(ddof=0).alias("sd_loss_red"),
@@ -692,7 +711,13 @@ def _identifiability_rows(config: TuningStudyConfig, recovery: pl.DataFrame) -> 
     for row in rows:
         sd = row["sd_loss_red"]
         row["sn"] = row["mean_loss_red"] / sd if sd and sd > 1e-12 else None
-    rows.sort(key=lambda row: (str(row["objective"]), order.index(row["scenario"]) if row["scenario"] in order else 99))
+    rows.sort(
+        key=lambda row: (
+            str(row["regularization"]),
+            str(row["objective"]),
+            order.index(row["scenario"]) if row["scenario"] in order else 99,
+        )
+    )
     return rows
 
 
@@ -724,7 +749,7 @@ def build_tuning_summary_markdown(
     if planted:
         top = max(planted, key=lambda row: row["sn"])
         headline.append(
-            f"Most-identifiable knob: **{top['scenario']}** ({top['objective']}, S/N "
+            f"Most-identifiable knob: **{top['scenario']}** ({top['regularization']}, {top['objective']}, S/N "
             f"{_md_value(top['sn'])}, param error {_md_value(top['mean_param_err'])})."
         )
     if apparent_snr.get("synthetic_mean") is not None and apparent_snr.get("real_mean") is not None:
@@ -759,6 +784,7 @@ def build_tuning_summary_markdown(
         _md_table(
             ident,
             (
+                ("regularization", "Regularization"),
                 ("objective", "Objective"),
                 ("scenario", "Scenario"),
                 ("mean_loss_red", "Mean loss-red"),

@@ -61,11 +61,13 @@ def test_key_is_insensitive_to_posthoc_regularization():
     task = _real_task()
     eta = build_hyperprior(HyperPriorConfig())
     base = _key(TuningConfig(), eta, [task])
-    trust_region = TuningConfig(search=SearchConfig(single_task_regularization="trust_region", trust_region_radius=0.5))
+    prior_distance = TuningConfig(
+        search=SearchConfig(single_task_regularization="prior_distance", prior_distance_penalty=0.08)
+    )
     closest = TuningConfig(
         search=SearchConfig(single_task_regularization="closest_to_baseline", competitive_tolerance=0.02)
     )
-    assert _key(trust_region, eta, [task]) == base
+    assert _key(prior_distance, eta, [task]) == base
     assert _key(closest, eta, [task]) == base
 
 

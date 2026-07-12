@@ -122,8 +122,8 @@ def test_regularization_reuses_raw_cache_and_applies_at_read_time(tmp_path):
     regularized_config = base_config.model_copy(
         update={
             "search": SearchConfig(
-                single_task_regularization="trust_region",
-                trust_region_radius=0.01,
+                single_task_regularization="prior_distance",
+                prior_distance_penalty=0.08,
             )
         }
     )
@@ -159,5 +159,6 @@ def test_regularization_reuses_raw_cache_and_applies_at_read_time(tmp_path):
     )
 
     assert raw.cache_key == regularized.cache_key
-    assert regularized.total > raw.total
+    distance = float(np.linalg.norm(np.asarray(raw.candidate_vector) - np.asarray(baseline_vector)))
+    assert regularized.total == pytest.approx(raw.total + 0.08 * distance**2)
     assert len(list(tmp_path.iterdir())) == 1
