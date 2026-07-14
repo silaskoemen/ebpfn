@@ -32,12 +32,12 @@ def test_status_requires_audit_decisions():
     assert tuning_recovery.derive_study_status(fast, checks) == ("provisional", [])
 
     audit = _config("audit")
-    assert tuning_recovery.derive_study_status(audit, checks) == (
+    assert tuning_recovery.derive_study_status(audit, checks) == ("frozen", [])
+    pending = audit.model_copy(update={"single_task_regularization_decision": "pending"})
+    assert tuning_recovery.derive_study_status(pending, checks) == (
         "incomplete",
         ["single_task_regularization_decision"],
     )
-    resolved = audit.model_copy(update={"single_task_regularization_decision": "prior_distance"})
-    assert tuning_recovery.derive_study_status(resolved, checks) == ("frozen", [])
 
 
 def test_checkpoint_identity_excludes_decision_and_output_metadata():

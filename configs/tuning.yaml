@@ -47,7 +47,7 @@ planted_knobs:
 prior_distance_penalty: 0.08
 competitive_tolerance: 0.02
 decision_owner: ebpfn-v1
-decision_date: "2026-07-12"
+decision_date: "2026-07-13"
 multiresolution_decision: geometric_uniform_frozen_minimum_256
 synthetic_failure_decision: raise
-single_task_regularization_decision: pending
+single_task_regularization_decision: prior_distance
