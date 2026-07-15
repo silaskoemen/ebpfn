@@ -1,5 +1,6 @@
 import torch
 from ebpfn.config.pfn import PfnArchConfig, PfnStudyModeConfig, PfnTrainConfig
+from ebpfn.pfn.data import PriorTaskSource
 from ebpfn.pfn.feasibility import profile
 
 
@@ -27,8 +28,12 @@ def test_profile_returns_well_formed_report() -> None:
     for cell in report["cells"]:
         assert cell["train_ms"] >= 0.0
         assert cell["infer_ms"] >= 0.0
+        assert cell["status"] == "ok"
+        assert cell["projected_train_hours"] >= 0.0
         assert {"rows", "features", "n_train", "n_test", "peak_memory_mb"} <= set(cell)
     assert report["in_regime"] is True
+    assert report["all_cells_feasible"] is True
+    assert report["profile_tasks_match_training"] is True
     assert set(report["realized_shapes"]) == {"n_rows", "n_features"}
 
 
@@ -114,3 +119,43 @@ def test_profile_rejects_jitter_range_beyond_max_context() -> None:
     )
 
     assert profile(arch, train, mode, reps=1)["in_regime"] is False
+
+
+def test_profile_retains_out_of_memory_as_a_cell_outcome(monkeypatch) -> None:
+    def out_of_memory(*args, **kwargs):
+        raise torch.OutOfMemoryError("test out of memory")
+
+    monkeypatch.setattr(PriorTaskSource, "tensor_batch", out_of_memory)
+    arch = PfnArchConfig(
+        n_bins=16,
+        embed_dim=8,
+        col_num_blocks=1,
+        row_num_blocks=1,
+        icl_num_blocks=1,
+        col_nhead=2,
+        row_nhead=2,
+        icl_nhead=2,
+        n_cls_rows=4,
+    )
+    train = PfnTrainConfig(
+        seed=0,
+        tasks_per_step=1,
+        anchor_probe_fit=24,
+        anchor_probe_score=8,
+        anchor_features=4,
+        device="cpu",
+    )
+    mode = PfnStudyModeConfig(
+        name="fast",
+        output_dir="unused",
+        smoke_steps=1,
+        profile_rows=[32],
+        profile_features=[4],
+        profile_tasks=1,
+    )
+
+    report = profile(arch, train, mode, reps=1)
+
+    assert report["all_cells_feasible"] is False
+    assert report["cells"][0]["status"] == "oom"
+    assert report["cells"][0]["train_ms"] is None

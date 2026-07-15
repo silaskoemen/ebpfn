@@ -18,6 +18,7 @@ from ebpfn.config.data import (
     RotationConfig,
     SplitConfig,
 )
+from ebpfn.config.offline_validation import OfflineValidationConfig, OfflineValidationModeConfig
 from ebpfn.config.pfn import (
     PfnArchConfig,
     PfnStudyConfig,
@@ -36,6 +37,7 @@ from ebpfn.config.prior import (
 )
 from ebpfn.config.tune import (
     DEFAULT_ACTIVE_COORDINATES,
+    ApparentSnrCalibrationConfig,
     CacheConfig,
     CloudConfig,
     CompareConfig,
@@ -47,6 +49,7 @@ from ebpfn.config.tune import (
 
 __all__ = [
     "DEFAULT_ACTIVE_COORDINATES",
+    "ApparentSnrCalibrationConfig",
     "BnnRouteConfig",
     "CacheConfig",
     "CharacterizationConfig",
@@ -59,6 +62,8 @@ __all__ = [
     "DataPreparationModeConfig",
     "HyperPriorConfig",
     "MapConfig",
+    "OfflineValidationConfig",
+    "OfflineValidationModeConfig",
     "OpenMLConfig",
     "PfnArchConfig",
     "PfnStudyConfig",

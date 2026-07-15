@@ -4,7 +4,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from benchmarks.studies import tuning_recovery
-from ebpfn.config import TuningStudyConfig
+from ebpfn.config import CharacterizationStudyConfig, TuningStudyConfig
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
@@ -16,6 +16,18 @@ def _config(mode: str = "fast") -> TuningStudyConfig:
     resolved = OmegaConf.to_container(raw, resolve=True)
     assert isinstance(resolved, dict)
     return TuningStudyConfig.model_validate(resolved)
+
+
+def _characterization_config() -> CharacterizationStudyConfig:
+    config_dir = (Path(__file__).parents[2] / "configs").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(config_dir)):
+        raw = compose(
+            config_name="characterization",
+            overrides=["characterization_mode=audit", "dataset=airfoil", "repeats=2"],
+        )
+    resolved = OmegaConf.to_container(raw, resolve=True)
+    assert isinstance(resolved, dict)
+    return CharacterizationStudyConfig.model_validate(resolved)
 
 
 def test_tuning_study_configuration_is_strict_and_resolved():
@@ -57,6 +69,17 @@ def test_checkpoint_identity_excludes_decision_and_output_metadata():
 
 def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
     config = _config()
+    roles_dir = tmp_path / "configs"
+    roles_dir.mkdir()
+    (roles_dir / "source_roles.json").write_text(
+        json.dumps(
+            {
+                "policy_version": "test-source-roles-1",
+                "pilot_source_ids": ["pilot-source"],
+                "confirmatory_source_ids": ["confirmatory-source"],
+            }
+        )
+    )
     tables = {
         "evaluations": pl.DataFrame({"total": [0.2]}),
         "candidates": pl.DataFrame({"selection_rank": [0]}),
@@ -85,9 +108,11 @@ def test_artifact_writer_emits_complete_contract(tmp_path, monkeypatch):
         "summary.md",
         "environment.json",
         "run.log",
+        "source_split.json",
     }
     assert {path.name for path in (tmp_path / "out").iterdir()} == expected
     assert json.loads((tmp_path / "out" / "decision_log.json").read_text())["status"] == "provisional"
+    assert json.loads((tmp_path / "out" / "source_split.json").read_text())["split_id"]
 
 
 def test_checkpointed_run_skips_completed_parts(tmp_path, monkeypatch):
@@ -139,3 +164,75 @@ def test_checkpoint_rejects_a_different_study_config(tmp_path):
 
     with pytest.raises(ValueError, match="does not match"):
         tuning_recovery._CellStore(checkpoint_path, tuning_recovery._checkpoint_identity(changed))
+
+
+def test_apparent_snr_real_targets_use_frozen_decision_repeats_and_source_role(tmp_path):
+    config = _characterization_config()
+    output = tmp_path / "dataset_airfoil__mode_audit__test"
+    output.mkdir()
+    (output / "config.json").write_text(json.dumps(config.model_dump(mode="json")))
+    selected_lambda = config.characterization.ridge.lambda_
+    selected_policy = tuning_recovery._row_policy_name(config.characterization)
+    (output / "decision_log.json").write_text(
+        json.dumps({"ridge_lambda": selected_lambda, "row_budget_policy": selected_policy})
+    )
+    tasks = [
+        {
+            "repeat": repeat,
+            "source_id": "source-a",
+            "shape": {
+                "n_probe_fit": 480,
+                "n_probe_score": 160,
+                "p_numeric": 5,
+                "p_categorical": 0,
+                "task_type": "regression",
+            },
+        }
+        for repeat in range(2)
+    ]
+    (output / "task_manifest.json").write_text(json.dumps({"dataset": "airfoil", "tasks": tasks}))
+    rows = []
+    for repeat, gains in enumerate(((0.4, 0.5), (0.6, 0.7))):
+        for learner, gain in zip(("linear", "rff"), gains, strict=True):
+            rows.append(
+                {
+                    "repeat": repeat,
+                    "representation": "raw",
+                    "policy": "observation/on",
+                    "lambda": selected_lambda,
+                    "statistic": "gain",
+                    "target": "location",
+                    "learner": learner,
+                    "valid": True,
+                    "row_budget": 640,
+                    "value": gain,
+                }
+            )
+        rows.append(
+            {
+                **rows[-1],
+                "lambda": 0.1 if selected_lambda != 0.1 else 0.01,
+                "value": 0.99,
+            }
+        )
+    pl.DataFrame(rows).write_parquet(output / "coordinates.parquet")
+    roles_path = tmp_path / "source_roles.json"
+    roles_path.write_text(
+        json.dumps(
+            {
+                "policy_version": "test-roles-1",
+                "pilot_source_ids": ["source-a"],
+                "confirmatory_source_ids": ["source-b"],
+            }
+        )
+    )
+
+    targets, split_id = tuning_recovery._real_apparent_snr_targets(tmp_path, roles_path, role="pilot")
+
+    assert split_id
+    assert len(targets) == 1
+    assert targets[0].source_id == "source-a"
+    assert targets[0].real_gains == pytest.approx((0.5, 0.7))
+    assert targets[0].shapes[0].p_numeric == 5
+    confirmatory, _ = tuning_recovery._real_apparent_snr_targets(tmp_path, roles_path, role="confirmatory")
+    assert confirmatory == []

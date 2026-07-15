@@ -76,7 +76,7 @@ class CompositionalRouteConfig(StrictConfigModel):
 class HyperPriorConfig(StrictConfigModel):
     generator_weights: tuple[float, ...] = (0.25, 0.25, 0.25, 0.25)
     corr_strength_mean: float = 0.3
-    log_snr_mean: float = 0.7
+    log_snr_mean: float = 2.7
     heteroskedastic_rate: float = 0.2
     heavy_tail_rate: float = 0.2
     snr_dispersion: float = 0.5
@@ -109,7 +109,7 @@ class ShapeJitterConfig(StrictConfigModel):
     sigma_n: float = 0.4
     sigma_p: float = 0.2
     n_min: int = 32
-    n_max: int = 4096
+    n_max: int = 1024
     p_min: int = 1
     p_max: int = 100
 

@@ -32,7 +32,14 @@ def run_study(config: PfnStudyConfig) -> dict[str, Any]:
     smoke_train = config.train.model_copy(update={"steps": config.mode.smoke_steps})
     _, result = train_pfn(config.arch, smoke_train, log_every=max(1, config.mode.smoke_steps // 5))
     loss_summary = _loss_summary(result.losses)
-    status = "pass" if loss_summary["decreased"] and report["in_regime"] else "check"
+    status = (
+        "pass"
+        if loss_summary["decreased"]
+        and report["in_regime"]
+        and report["all_cells_feasible"]
+        and report["profile_tasks_match_training"]
+        else "check"
+    )
     return {"report": report, "losses": result.losses, "loss_summary": loss_summary, "status": status}
 
 
@@ -65,6 +72,10 @@ def build_summary_markdown(config: PfnStudyConfig, result: dict[str, Any]) -> st
         f"parameters: **{report['n_parameters']:,}** | n_bins: {config.arch.n_bins}.",
         f"Anchor context: **{report['anchor']['rows']} rows x {report['anchor']['features']} features**, "
         f"max_context {report['max_context']} — in regime: **{report['in_regime']}**.",
+        f"Profile batch matches training: **{report['profile_tasks_match_training']}** | "
+        f"accumulation: **{report['gradient_accumulation_steps']}** | "
+        f"effective tasks/step: **{report['effective_tasks_per_step']}** | "
+        f"all cells feasible: **{report['all_cells_feasible']}**.",
         f"Smoke train ({config.mode.smoke_steps} steps): loss **{loss['first']:.3f} -> {loss['last']:.3f}** "
         f"(min {loss['min']:.3f}), decreased: **{loss['decreased']}**.",
     ]
@@ -88,6 +99,7 @@ def build_summary_markdown(config: PfnStudyConfig, result: dict[str, Any]) -> st
                     ("train_ms", "Train ms/step"),
                     ("infer_ms", "Infer ms"),
                     ("peak_memory_mb", "Peak MB"),
+                    ("status", "Status"),
                 ),
             ),
             "",

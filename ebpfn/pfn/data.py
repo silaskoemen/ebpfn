@@ -117,6 +117,15 @@ class PriorTaskSource:
         self.eta = eta
         self.streams = streams
 
+    @property
+    def stream_provenance(self) -> dict[str, str | int | bool | None]:
+        return {
+            "version": "prior-task-source-1",
+            "base_seed": self.streams.base_seed,
+            "common_random_numbers": False,
+            "pairing_id": None,
+        }
+
     @classmethod
     def from_eta_file(cls, path: Path, streams: RandomStreams) -> "PriorTaskSource":
         """Load an exact tuned eta artifact as a PFN training source."""
@@ -130,3 +139,56 @@ class PriorTaskSource:
 
     def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
         return collate_tasks(self.sample_batch(batch_size, shape, *identity))
+
+
+class PairedPriorTaskSource(PriorTaskSource):
+    """Task source whose eta variants share the same underlying random draws.
+
+    ``pairing_id`` identifies one frozen paired experiment. Callers must use the
+    same seed, shape, pairing ID, and per-task identity for every eta variant.
+    Generated task IDs remain eta-specific because ``sample_task`` always hashes
+    eta into the public task identity even on its common-random-number path.
+    """
+
+    def __init__(self, eta: HyperPrior, streams: RandomStreams, *, pairing_id: str) -> None:
+        super().__init__(eta, streams)
+        if not pairing_id:
+            raise ValueError("paired task source requires a nonempty pairing_id")
+        self.pairing_id = pairing_id
+
+    @classmethod
+    def from_paired_eta_file(
+        cls,
+        path: Path,
+        streams: RandomStreams,
+        *,
+        pairing_id: str,
+    ) -> "PairedPriorTaskSource":
+        payload = json.loads(path.read_text())
+        if not isinstance(payload, dict):
+            raise TypeError("eta artifact must contain a JSON object")
+        return cls(hyperprior_from_dict(payload), streams, pairing_id=pairing_id)
+
+    @property
+    def stream_provenance(self) -> dict[str, str | int | bool | None]:
+        return {
+            "version": "paired-prior-task-source-1",
+            "base_seed": self.streams.base_seed,
+            "common_random_numbers": True,
+            "pairing_id": self.pairing_id,
+        }
+
+    def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
+        return [
+            sample_task(
+                self.eta,
+                shape,
+                self.streams,
+                "paired-prior-task-source-1",
+                self.pairing_id,
+                *identity,
+                member,
+                common_random_numbers=True,
+            ).tuning
+            for member in range(batch_size)
+        ]

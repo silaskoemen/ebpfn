@@ -13,8 +13,9 @@ import numpy as np
 import polars as pl
 from benchmarks.studies.study_logging import configure_study_logging
 from ebpfn.cache import EvaluationCache
-from ebpfn.config import TuningConfig, TuningStudyConfig
-from ebpfn.data import CharacterizationShape, content_hash
+from ebpfn.config import CharacterizationConfig, CharacterizationStudyConfig, TuningConfig, TuningStudyConfig
+from ebpfn.data import CharacterizationShape, content_hash, load_source_role_split
+from ebpfn.data.types import TaskType
 from ebpfn.priors import EtaVectorizer, HyperPrior, build_hyperprior, sample_task
 from ebpfn.tune import CandidateRecord, EvaluationResult, characterize_task, evaluate_candidate, make_panel, run_search
 from ebpfn.utils import RandomStreams, environment_provenance
@@ -211,6 +212,7 @@ def _rows_to_frames(rows: _StudyRows) -> dict[str, pl.DataFrame]:
 
 def _checkpoint_identity(config: TuningStudyConfig) -> str:
     payload = config.model_dump(mode="json")
+    payload.pop("calibration")
     for field in (
         "decision_owner",
         "decision_date",
@@ -597,66 +599,249 @@ def _best_location_gain(characterization: Any) -> float:
     return best if best != float("-inf") else float("nan")
 
 
-def _real_best_location_gains(characterization_dir: Path) -> list[float]:
-    gains: list[float] = []
-    for path in sorted(characterization_dir.glob("*mode_audit*/coordinates.parquet")):
-        if "synthetic" in path.parent.name:  # the real reference must exclude the synthetic baseline arm
+@dataclasses.dataclass(frozen=True)
+class _ApparentSnrTarget:
+    dataset: str
+    source_id: str
+    shapes: tuple[CharacterizationShape, ...]
+    real_gains: tuple[float, ...]
+    characterization: CharacterizationConfig
+
+
+def _row_policy_name(config: CharacterizationConfig) -> str:
+    policy = config.row_budgets
+    return f"{policy.spacing}/{policy.weight}/{policy.feature_view}"
+
+
+def _selected_row_policy(config: CharacterizationConfig, name: str) -> CharacterizationConfig:
+    try:
+        spacing, weight, feature_view = name.split("/")
+    except ValueError as error:
+        raise ValueError(f"invalid frozen row-policy name {name!r}") from error
+    row_budgets = config.row_budgets.model_copy(
+        update={"spacing": spacing, "weight": weight, "feature_view": feature_view}
+    )
+    return config.model_copy(update={"row_budgets": row_budgets})
+
+
+def _shape_from_manifest(payload: object) -> CharacterizationShape:
+    if not isinstance(payload, dict):
+        raise TypeError("task-manifest shape must be an object")
+    shape = cast(dict[str, object], payload)
+
+    def integer(name: str) -> int:
+        value = shape[name]
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise TypeError(f"task-manifest shape field {name!r} must be an integer")
+        return value
+
+    task_type = shape["task_type"]
+    if task_type not in ("regression", "classification"):
+        raise ValueError(f"unknown task type in task manifest: {task_type!r}")
+    return CharacterizationShape(
+        n_probe_fit=integer("n_probe_fit"),
+        n_probe_score=integer("n_probe_score"),
+        p_numeric=integer("p_numeric"),
+        p_categorical=integer("p_categorical"),
+        task_type=cast(TaskType, task_type),
+    )
+
+
+def _real_apparent_snr_targets(
+    characterization_dir: Path,
+    source_roles_path: Path,
+    *,
+    role: str,
+) -> tuple[list[_ApparentSnrTarget], str]:
+    paths = sorted(characterization_dir.glob("*mode_audit*/coordinates.parquet"))
+    real_paths = [path for path in paths if "synthetic" not in path.parent.name]
+    if not real_paths:
+        return [], ""
+    source_roles = load_source_role_split(source_roles_path)
+    targets: list[_ApparentSnrTarget] = []
+    for path in real_paths:
+        manifest_path = path.parent / "task_manifest.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"{manifest_path} is required for shape-matched calibration; rerun or backfill characterization"
+            )
+        manifest = json.loads(manifest_path.read_text())
+        tasks = manifest.get("tasks") if isinstance(manifest, dict) else None
+        if not isinstance(tasks, list) or not tasks:
+            raise ValueError(f"{manifest_path} has no task records")
+        source_ids = {str(task["source_id"]) for task in tasks}
+        if len(source_ids) != 1:
+            raise ValueError(f"{manifest_path} must describe exactly one independent source")
+        source_id = source_ids.pop()
+        source_role = source_roles.role_for(source_id)
+        if source_role != role:
             continue
+
+        resolved = CharacterizationStudyConfig.model_validate_json((path.parent / "config.json").read_text())
+        decision = json.loads((path.parent / "decision_log.json").read_text())
+        selected_lambda = decision["ridge_lambda"]
+        selected_policy = decision["row_budget_policy"]
+        if selected_lambda is None:
+            raise ValueError(f"{path.parent} has no frozen ridge-lambda decision")
+
         frame = pl.read_parquet(path)
         raw = frame.filter(
             (pl.col("representation") == "raw")
+            & (pl.col("policy") == "observation/on")
+            & (pl.col("lambda") == selected_lambda)
             & (pl.col("statistic") == "gain")
             & (pl.col("target") == "location")
             & pl.col("valid")
         )
         if raw.is_empty():
-            continue
+            raise ValueError(f"{path.parent} has no valid rows for its frozen ridge decision")
         raw = raw.filter(pl.col("row_budget") == raw["row_budget"].max())
-        gains.append(float(raw["value"].max()))  # ty:ignore[invalid-argument-type]
-    return gains
+        gains_by_repeat = raw.group_by("repeat").agg(pl.col("value").max().alias("best_gain")).sort("repeat")
+        task_by_repeat = {int(task["repeat"]): task for task in tasks}
+        repeats = tuple(int(value) for value in gains_by_repeat["repeat"])
+        if set(repeats) != set(task_by_repeat):
+            raise ValueError(f"{path.parent} coordinate repeats do not match its task manifest")
+        shapes = tuple(_shape_from_manifest(task_by_repeat[repeat]["shape"]) for repeat in repeats)
+        if any(shape.p_categorical for shape in shapes):
+            raise ValueError("apparent-SNR calibration currently supports numeric/binary predictors only")
+        characterization = _selected_row_policy(resolved.characterization, selected_policy).model_copy(
+            update={
+                "representation": "raw",
+                "ridge": resolved.characterization.ridge.model_copy(update={"lambda_": selected_lambda}),
+                "include_observation_coordinates": True,
+            }
+        )
+        targets.append(
+            _ApparentSnrTarget(
+                dataset=str(manifest["dataset"]),
+                source_id=source_id,
+                shapes=shapes,
+                real_gains=tuple(float(value) for value in gains_by_repeat["best_gain"]),
+                characterization=characterization,
+            )
+        )
+    return targets, source_roles.split_id
 
 
 def apparent_snr_report(
     config: TuningStudyConfig,
     project_root: Path,
     *,
-    n_tasks: int = 64,
+    n_tasks_per_target: int = 16,
     characterization_dir: Path | None = None,
+    source_roles_path: Path | None = None,
+    role: str = "pilot",
+    eta: HyperPrior | None = None,
 ) -> dict[str, Any]:
-    """One-time calibration diagnostic: does the baseline prior's apparent-SNR (best location gain)
-    distribution match the real corpus? This is how SNR-as-cleanliness is handled — by matching the
-    distribution as fixed config, not by tuning a non-identifiable knob."""
-    baseline_eta = build_hyperprior(config.tuning.prior)
-    char_raw = config.tuning.characterization.model_copy(update={"representation": "raw"})
-    shape = CharacterizationShape(
-        config.mode.n_probe_fit, config.mode.n_probe_score, config.mode.n_features, 0, "regression"
+    """Compare baseline-prior learnability with exact-shape, role-frozen real tasks."""
+    if n_tasks_per_target < 1:
+        raise ValueError("n_tasks_per_target must be positive")
+    if role not in ("pilot", "confirmatory"):
+        raise ValueError("source role must be 'pilot' or 'confirmatory'")
+    evaluated_eta = eta or build_hyperprior(config.tuning.prior)
+    targets, source_split_id = _real_apparent_snr_targets(
+        characterization_dir or (project_root / "benchmarks/results/characterization"),
+        source_roles_path or (project_root / "configs/source_roles.json"),
+        role=role,
     )
     streams = RandomStreams(config.tuning.seed)
-    synthetic: list[float] = []
-    for index in range(n_tasks):
-        task = sample_task(baseline_eta, shape, streams, "apparent-snr", index, "synthetic", index).tuning
-        gain = _best_location_gain(characterize_task(task, char_raw, "full", random_identity=("apparent-snr", index)))
-        if gain == gain:  # drop NaN
-            synthetic.append(gain)
-    real = _real_best_location_gains(characterization_dir or (project_root / "benchmarks/results/characterization"))
+    target_rows: list[dict[str, Any]] = []
+    all_synthetic: list[float] = []
+    for target in targets:
+        synthetic: list[float] = []
+        for index in range(n_tasks_per_target):
+            shape = target.shapes[index % len(target.shapes)]
+            identity = ("apparent-snr", source_split_id, target.dataset, index)
+            task = sample_task(
+                evaluated_eta,
+                shape,
+                streams,
+                *identity,
+                common_random_numbers=True,
+            ).tuning
+            gain = _best_location_gain(
+                characterize_task(task, target.characterization, "full", random_identity=identity)
+            )
+            if gain == gain:
+                synthetic.append(gain)
+        if not synthetic:
+            raise ValueError(f"all synthetic apparent-SNR values were invalid for {target.dataset}")
+        real_mean = float(np.mean(target.real_gains))
+        synthetic_mean = float(np.mean(synthetic))
+        synthetic_array = np.asarray(synthetic)
+        real_array = np.asarray(target.real_gains)
+        observation = float(np.mean(np.abs(synthetic_array[:, None] - real_array[None, :])))
+        ensemble = 0.5 * float(np.mean(np.abs(synthetic_array[:, None] - synthetic_array[None, :])))
+        all_synthetic.extend(synthetic)
+        target_rows.append(
+            {
+                "dataset": target.dataset,
+                "source_id": target.source_id,
+                "shape": dataclasses.asdict(target.shapes[0]),
+                "n_real_repeats": len(target.real_gains),
+                "n_synthetic": len(synthetic),
+                "real_gain": real_mean,
+                "synthetic_mean": synthetic_mean,
+                "gap_real_minus_synthetic": real_mean - synthetic_mean,
+                "energy_score": observation - ensemble,
+                "real_repeat_gains": list(target.real_gains),
+                "synthetic_gains": synthetic,
+            }
+        )
+
+    sources: list[dict[str, Any]] = []
+    for source_id in sorted({str(row["source_id"]) for row in target_rows}):
+        rows = [row for row in target_rows if row["source_id"] == source_id]
+        real_mean = float(np.mean([float(row["real_gain"]) for row in rows]))
+        synthetic_mean = float(np.mean([float(row["synthetic_mean"]) for row in rows]))
+        energy_score = float(np.mean([float(row["energy_score"]) for row in rows]))
+        sources.append(
+            {
+                "source_id": source_id,
+                "datasets": [row["dataset"] for row in rows],
+                "real_gain": real_mean,
+                "synthetic_mean": synthetic_mean,
+                "gap_real_minus_synthetic": real_mean - synthetic_mean,
+                "energy_score": energy_score,
+            }
+        )
 
     def quantiles(values: list[float]) -> dict[str, float] | None:
         return {str(p): float(np.quantile(values, p)) for p in (0.1, 0.5, 0.9)} if values else None
 
+    real_source_means = [float(row["real_gain"]) for row in sources]
+    synthetic_source_means = [float(row["synthetic_mean"]) for row in sources]
     report: dict[str, Any] = {
-        "n_synthetic": len(synthetic),
-        "n_real": len(real),
-        "synthetic_mean": float(np.mean(synthetic)) if synthetic else None,
-        "real_mean": float(np.mean(real)) if real else None,
-        "synthetic_quantiles": quantiles(synthetic),
-        "real_quantiles": quantiles(real),
+        "calibration_version": "shape-matched-apparent-snr-1",
+        "source_role": role,
+        "source_split_id": source_split_id or None,
+        "n_synthetic": len(all_synthetic),
+        "n_real": len(target_rows),
+        "n_sources": len(sources),
+        "synthetic_mean": float(np.mean(synthetic_source_means)) if sources else None,
+        "real_mean": float(np.mean(real_source_means)) if sources else None,
+        "synthetic_quantiles": quantiles(synthetic_source_means),
+        "real_quantiles": quantiles(real_source_means),
+        "targets": target_rows,
+        "sources": sources,
+        "source_balanced_energy_score": (
+            float(np.mean([float(row["energy_score"]) for row in sources])) if sources else None
+        ),
     }
-    if synthetic and real:
-        grid = np.sort(np.concatenate([synthetic, real]))
-        cdf_synth = np.searchsorted(np.sort(synthetic), grid, side="right") / len(synthetic)
-        cdf_real = np.searchsorted(np.sort(real), grid, side="right") / len(real)
-        report["ks_statistic"] = float(np.max(np.abs(cdf_synth - cdf_real)))
-        report["mean_gap_real_minus_synthetic"] = float(np.mean(real) - np.mean(synthetic))
+    if sources:
+        source_gaps = np.asarray([float(row["gap_real_minus_synthetic"]) for row in sources], dtype=float)
+        report["mean_gap_real_minus_synthetic"] = float(np.mean(source_gaps))
+        bootstrap_rng = np.random.default_rng(np.random.SeedSequence([config.tuning.seed, *b"apparent-snr-bootstrap"]))
+        bootstrap_indices = bootstrap_rng.integers(
+            0,
+            len(source_gaps),
+            size=(10_000, len(source_gaps)),
+        )
+        bootstrap_means = source_gaps[bootstrap_indices].mean(axis=1)
+        report["mean_gap_bootstrap_95"] = [
+            float(np.quantile(bootstrap_means, 0.025)),
+            float(np.quantile(bootstrap_means, 0.975)),
+        ]
     return report
 
 
@@ -755,7 +940,8 @@ def build_tuning_summary_markdown(
     if apparent_snr.get("synthetic_mean") is not None and apparent_snr.get("real_mean") is not None:
         headline.append(
             f"Apparent-SNR coverage: synthetic mean **{_md_value(apparent_snr['synthetic_mean'])}** vs "
-            f"real **{_md_value(apparent_snr['real_mean'])}** (KS {_md_value(apparent_snr.get('ks_statistic'))})."
+            f"real **{_md_value(apparent_snr['real_mean'])}** "
+            f"(source-weighted gap {_md_value(apparent_snr.get('mean_gap_real_minus_synthetic'))})."
         )
     if evidence.get("total_failures") is not None:
         headline.append(f"Cloud-member failures: {evidence['total_failures']}.")
@@ -798,7 +984,7 @@ def build_tuning_summary_markdown(
         "",
         "## Apparent-SNR Calibration",
         "_Best location gain (how learnable the mean is by the map family). Synthetic = baseline prior;"
-        " real = Step-2 frozen corpus. A large gap/KS means the prior mis-covers real learnability._",
+        " real = exact-shape pilot corpus under frozen source roles. Values are weighted equally by independent source._",
         "",
         _md_table(snr_rows, (("metric", "Metric"), ("synthetic", "Synthetic"), ("real", "Real"))),
         "",
@@ -825,8 +1011,20 @@ def write_study_artifacts(
     (destination / "evidence.json").write_text(json.dumps(result["evidence"], indent=2, sort_keys=True))
     (destination / "decision_log.json").write_text(json.dumps(result["decision"], indent=2, sort_keys=True))
     logger.info("📐 apparent-SNR calibration | characterizing baseline-prior tasks")
-    apparent_snr = apparent_snr_report(config, project_root)
+    calibration = config.calibration
+    apparent_snr = apparent_snr_report(
+        config,
+        project_root,
+        n_tasks_per_target=calibration.n_synthetic_per_target,
+        characterization_dir=project_root / calibration.characterization_dir,
+        source_roles_path=project_root / calibration.source_roles_path,
+        role=calibration.source_role,
+    )
     (destination / "apparent_snr.json").write_text(json.dumps(apparent_snr, indent=2, sort_keys=True))
+    source_roles_path = project_root / calibration.source_roles_path
+    if source_roles_path.exists():
+        source_roles = load_source_role_split(source_roles_path)
+        (destination / "source_split.json").write_text(json.dumps(source_roles.to_payload(), indent=2, sort_keys=True))
     (destination / "summary.md").write_text(build_tuning_summary_markdown(config, result, apparent_snr))
     (destination / "environment.json").write_text(
         json.dumps(environment_provenance(project_root), indent=2, sort_keys=True)

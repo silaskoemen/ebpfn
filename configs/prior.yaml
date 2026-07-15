@@ -5,7 +5,7 @@ defaults:
 prior:
   generator_weights: [0.25, 0.25, 0.25, 0.25]
   corr_strength_mean: 0.3
-  log_snr_mean: 0.7
+  log_snr_mean: 2.7
   heteroskedastic_rate: 0.2
   heavy_tail_rate: 0.2
   snr_dispersion: 0.5
@@ -36,7 +36,7 @@ jitter:
   sigma_n: 0.4
   sigma_p: 0.2
   n_min: 32
-  n_max: 4096
+  n_max: 1024
   p_min: 1
   p_max: 100
 

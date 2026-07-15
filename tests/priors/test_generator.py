@@ -1,11 +1,20 @@
 import dataclasses
+import json
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import pytest
 from ebpfn.config import HyperPriorConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import ROUTE_ORDER, HyperPrior, build_hyperprior, sample_cloud, sample_task
+from ebpfn.priors import (
+    ROUTE_ORDER,
+    HyperPrior,
+    build_hyperprior,
+    hyperprior_from_dict,
+    sample_cloud,
+    sample_task,
+)
 from ebpfn.utils import RandomStreams
 
 
@@ -19,6 +28,13 @@ def _one_hot(eta: HyperPrior, route: str) -> HyperPrior:
 
 def _shape(n_fit: int, n_score: int, p: int) -> CharacterizationShape:
     return CharacterizationShape(n_fit, n_score, p, 0, "regression")
+
+
+def test_frozen_eta_0_matches_the_default_hyperprior() -> None:
+    path = Path(__file__).parents[2] / "configs/eta_0.json"
+    eta_0 = hyperprior_from_dict(json.loads(path.read_text()))
+
+    assert eta_0 == build_hyperprior(HyperPriorConfig())
 
 
 def _knn_r2(train_x, train_y, test_x, test_y, k: int = 10) -> float:

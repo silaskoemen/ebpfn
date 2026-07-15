@@ -1,0 +1,9 @@
+# @package mode
+name: pilot
+output_dir: benchmarks/results/offline_validation/learning_curve_pilot
+pairing_id: step5-learning-curve-pilot-1
+baseline_eta_path: configs/eta_0.json
+source_roles_path: configs/source_roles.json
+seeds: [0]
+eta_labels: [eta_0, corr_strength_perturbed]
+perturbed_corr_strength_mean: 0.6

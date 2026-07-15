@@ -64,8 +64,14 @@ def test_fast_study_produces_provisional_decision_evidence(tmp_path):
         "schema_contrast.json",
         "schema_raw.json",
         "summary.md",
+        "task_manifest.json",
     }
     assert {path.name for path in output.iterdir()} == expected
+
+    manifest = json.loads((output / "task_manifest.json").read_text())
+    assert manifest["manifest_version"] == "characterization-task-manifest-1"
+    assert manifest["tasks"]
+    assert manifest["tasks"][0]["shape"]["n_probe_fit"] > 0
 
 
 def test_default_output_directory_is_slugged_and_hashed(tmp_path):

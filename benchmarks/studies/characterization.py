@@ -18,7 +18,7 @@ import polars as pl
 from benchmarks.studies.study_logging import configure_study_logging
 from ebpfn.characterize import TaskCharacterization, characterize_multiresolution
 from ebpfn.config import CharacterizationStudyConfig, PreprocessingConfig, RowBudgetConfig
-from ebpfn.data import FeatureSchema, TaskPartition, TuningTask, content_hash
+from ebpfn.data import FeatureSchema, TaskPartition, TuningTask, characterization_shape, content_hash
 from ebpfn.data.preprocessing import fit_feature_transform
 from ebpfn.data.rotations import infer_feature_schema
 from ebpfn.utils import environment_provenance
@@ -331,6 +331,39 @@ def make_task(label: str, config: CharacterizationStudyConfig, repeat: int, *, s
     if strength != 1.0:
         raise ValueError("response-strength sweeps are only defined for synthetic datasets")
     return _make_real_task(config, repeat)
+
+
+def build_task_manifest(config: CharacterizationStudyConfig) -> dict[str, Any]:
+    """Describe the exact tasks and shapes represented by a characterization run."""
+    tasks: list[dict[str, Any]] = []
+    for repeat in range(config.repeats):
+        for label in _study_mechanisms(config):
+            task = make_task(label, config, repeat)
+            shape = characterization_shape(task)
+            tasks.append(
+                {
+                    "dataset": config.dataset,
+                    "label": label,
+                    "repeat": repeat,
+                    "task_id": task.task_id,
+                    "source_id": task.source_id,
+                    "outer_split_id": task.outer_split_id,
+                    "characterization_split_id": task.characterization_split_id,
+                    "preprocessing_id": task.preprocessing_id,
+                    "shape": {
+                        "n_probe_fit": shape.n_probe_fit,
+                        "n_probe_score": shape.n_probe_score,
+                        "p_numeric": shape.p_numeric,
+                        "p_categorical": shape.p_categorical,
+                        "task_type": shape.task_type,
+                    },
+                }
+            )
+    return {
+        "manifest_version": "characterization-task-manifest-1",
+        "dataset": config.dataset,
+        "tasks": tasks,
+    }
 
 
 def _process_peak_rss_bytes() -> int:
@@ -1180,7 +1213,7 @@ def build_study_summary_markdown(
             f"({_markdown_value(top['absolute_share'])} of absolute mass)."
         )
     decision_line = (
-        f"Decision: ridge lambda **{_markdown_value(decision['ridge_lambda'])}**, " f"row policy **{selected_policy}**"
+        f"Decision: ridge lambda **{_markdown_value(decision['ridge_lambda'])}**, row policy **{selected_policy}**"
     )
     if median_runtime is not None:
         decision_line += f", median call **{_markdown_value(median_runtime)}s**"
@@ -1379,6 +1412,7 @@ def write_study_artifacts(
     (destination / "config.json").write_text(json.dumps(config.model_dump(mode="json"), indent=2, sort_keys=True))
     (destination / "decision_log.json").write_text(json.dumps(decision, indent=2, sort_keys=True))
     (destination / "evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True))
+    (destination / "task_manifest.json").write_text(json.dumps(build_task_manifest(config), indent=2, sort_keys=True))
     (destination / "summary.md").write_text(build_study_summary_markdown(config, table, decision, evidence))
     (destination / "environment.json").write_text(
         json.dumps(environment_provenance(project_root), indent=2, sort_keys=True)

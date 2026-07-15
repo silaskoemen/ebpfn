@@ -3,9 +3,8 @@ mode:
   name: audit
   output_dir: benchmarks/results/pfn/audit
   smoke_steps: 200
-  profile_rows: [256, 1024, 4096]
-  profile_features: [10, 50, 100]
-  profile_tasks: 4
-
-train:
-  steps: 200
+  # Decision cells: anchor and the realized upper row quantile / frozen maximum context.
+  # Use the production feature width and task batch rather than the smoke-model grid.
+  profile_rows: [640, 1024]
+  profile_features: [100]
+  profile_tasks: 1

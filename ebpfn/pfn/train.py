@@ -23,6 +23,8 @@ from ebpfn.priors import build_hyperprior, hyperprior_to_dict
 from ebpfn.priors.shapes import sample_training_shape
 from ebpfn.utils import RandomRole, RandomStreams
 
+MPS_MEMORY_FRACTION = 0.6
+
 
 def select_device(preference: str) -> torch.device:
     """Resolve ``"auto"`` to the best available accelerator (cuda > mps > cpu)."""
@@ -33,6 +35,20 @@ def select_device(preference: str) -> torch.device:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def configure_device_memory(device: torch.device) -> None:
+    """Apply allocator limits that keep accelerator use from starving the host."""
+    if device.type == "mps":
+        torch.mps.set_per_process_memory_fraction(MPS_MEMORY_FRACTION)
+
+
+def release_device_cache(device: torch.device) -> None:
+    """Release inactive allocations between differently shaped optimizer steps."""
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "mps":
+        torch.mps.empty_cache()
 
 
 def build_model(arch: PfnArchConfig, borders: Tensor) -> EBPFNModel:
@@ -74,6 +90,7 @@ class TrainResult:
     steps: int
     device: str
     checkpoint_path: Path | None
+    checkpoint_paths: tuple[Path, ...]
 
 
 def save_checkpoint(
@@ -84,19 +101,23 @@ def save_checkpoint(
     arch: PfnArchConfig,
     train: PfnTrainConfig,
     source: PriorTaskSource,
+    losses: list[float],
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / "checkpoint.pt"
+    path = directory / f"checkpoint_step_{step:08d}.pt"
     torch.save(
         {
+            "checkpoint_version": "pfn-training-checkpoint-2",
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "step": step,
+            "losses": list(losses),
             "borders": model.distribution.borders.detach().cpu(),
             "arch": arch.model_dump(mode="json"),
             "train": train.model_dump(mode="json"),
             "source_eta": hyperprior_to_dict(source.eta),
             "source_seed": source.streams.base_seed,
+            "source_stream": source.stream_provenance,
         },
         path,
     )
@@ -112,12 +133,38 @@ def load_checkpoint(path: Path, *, map_location: str | torch.device = "cpu") -> 
     return model, checkpoint
 
 
+def _validate_resume_checkpoint(
+    checkpoint: dict,
+    arch: PfnArchConfig,
+    train: PfnTrainConfig,
+    source: PriorTaskSource,
+) -> None:
+    if checkpoint.get("checkpoint_version") != "pfn-training-checkpoint-2":
+        raise ValueError("resume checkpoint has an unsupported version")
+    if checkpoint["arch"] != arch.model_dump(mode="json"):
+        raise ValueError("resume checkpoint architecture does not match the requested architecture")
+    stored_train = dict(checkpoint["train"])
+    requested_train = train.model_dump(mode="json")
+    stored_steps = int(stored_train.pop("steps"))
+    requested_steps = int(requested_train.pop("steps"))
+    if stored_train != requested_train:
+        raise ValueError("resume checkpoint training config does not match the requested training config")
+    completed_steps = int(checkpoint["step"])
+    if completed_steps > stored_steps or completed_steps > requested_steps:
+        raise ValueError("resume checkpoint step lies beyond its stored or requested training horizon")
+    if checkpoint["source_eta"] != hyperprior_to_dict(source.eta):
+        raise ValueError("resume checkpoint eta does not match the requested task source")
+    if checkpoint["source_stream"] != source.stream_provenance:
+        raise ValueError("resume checkpoint stream contract does not match the requested task source")
+
+
 def train_pfn(
     arch: PfnArchConfig,
     train: PfnTrainConfig,
     *,
     source: PriorTaskSource | None = None,
     checkpoint_dir: Path | None = None,
+    resume_from: Path | None = None,
     log_every: int = 50,
     on_step: Callable[[int, float], None] | None = None,
 ) -> tuple[EBPFNModel, TrainResult]:
@@ -128,6 +175,7 @@ def train_pfn(
     ``checkpoint_dir`` is set, plus once at the end.
     """
     device = select_device(train.device)
+    configure_device_memory(device)
     streams = RandomStreams(train.seed)
     if source is None:
         source = build_source(train, streams)
@@ -142,35 +190,75 @@ def train_pfn(
     torch.manual_seed(train.seed)
     model = build_model(arch, borders).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=train.lr, weight_decay=train.weight_decay)
-
-    logger.info(f"🧠 pfn train | {train.steps} steps | device={device} | n_bins={arch.n_bins} | anchor={anchor}")
-    model.train()
+    start_step = 0
     losses: list[float] = []
-    for step in range(train.steps):
+    checkpoint_paths: list[Path] = []
+    if resume_from is not None:
+        checkpoint = torch.load(resume_from, map_location=device, weights_only=False)
+        _validate_resume_checkpoint(checkpoint, arch, train, source)
+        model.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        start_step = int(checkpoint["step"])
+        losses = [float(value) for value in checkpoint["losses"]]
+        if len(losses) != start_step:
+            raise ValueError("resume checkpoint loss history does not align with its completed step")
+        checkpoint_paths.append(resume_from)
+
+    logger.info(
+        f"🧠 pfn train | {train.steps} steps | device={device} | n_bins={arch.n_bins} | anchor={anchor} | "
+        f"microbatch={train.tasks_per_step} x accumulation={train.gradient_accumulation_steps}"
+    )
+    model.train()
+    for step in range(start_step, train.steps):
         shape_rng = streams.generator(RandomRole.PFN_TRAINING, "shape", step)
         shape, _ = sample_training_shape(anchor, train.jitter, shape_rng)
-        batch = source.tensor_batch(train.tasks_per_step, shape, "train", step).to(device)
-
         scaled_lr = train.lr * _warmup_scale(step, train.warmup_steps)
         for group in optimizer.param_groups:
             group["lr"] = scaled_lr
 
-        optimizer.zero_grad()
-        loss = model.loss(batch)
-        loss.backward()
+        optimizer.zero_grad(set_to_none=True)
+        microbatch_losses: list[float] = []
+        for accumulation_step in range(train.gradient_accumulation_steps):
+            batch = source.tensor_batch(
+                train.tasks_per_step,
+                shape,
+                "train",
+                step,
+                "accumulation",
+                accumulation_step,
+            ).to(device)
+            loss = model.loss(batch)
+            (loss / train.gradient_accumulation_steps).backward()
+            microbatch_losses.append(float(loss.detach()))
+            del batch, loss
         torch.nn.utils.clip_grad_norm_(model.parameters(), train.grad_clip)
         optimizer.step()
+        if device.type == "mps":
+            release_device_cache(device)
 
-        loss_value = float(loss.detach())
+        loss_value = float(sum(microbatch_losses) / len(microbatch_losses))
         losses.append(loss_value)
         if on_step is not None:
             on_step(step, loss_value)
         if log_every and (step % log_every == 0 or step == train.steps - 1):
             logger.info(f"  step {step + 1}/{train.steps} | loss={loss_value:.4f} | lr={scaled_lr:.2e}")
         if checkpoint_dir is not None and (step + 1) % train.checkpoint_interval == 0:
-            save_checkpoint(checkpoint_dir, model, optimizer, step + 1, arch, train, source)
+            checkpoint_paths.append(
+                save_checkpoint(checkpoint_dir, model, optimizer, step + 1, arch, train, source, losses)
+            )
 
     checkpoint_path = None
     if checkpoint_dir is not None:
-        checkpoint_path = save_checkpoint(checkpoint_dir, model, optimizer, train.steps, arch, train, source)
-    return model, TrainResult(losses=losses, steps=train.steps, device=str(device), checkpoint_path=checkpoint_path)
+        expected = checkpoint_dir / f"checkpoint_step_{train.steps:08d}.pt"
+        if not checkpoint_paths or checkpoint_paths[-1] != expected:
+            checkpoint_paths.append(
+                save_checkpoint(checkpoint_dir, model, optimizer, train.steps, arch, train, source, losses)
+            )
+        checkpoint_path = expected
+    return model, TrainResult(
+        losses=losses,
+        steps=train.steps,
+        device=str(device),
+        checkpoint_path=checkpoint_path,
+        checkpoint_paths=tuple(checkpoint_paths),
+    )

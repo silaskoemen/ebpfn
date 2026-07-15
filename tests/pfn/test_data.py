@@ -6,7 +6,7 @@ import torch
 from ebpfn.config.pfn import PfnArchConfig
 from ebpfn.config.prior import HyperPriorConfig
 from ebpfn.data.types import CharacterizationShape
-from ebpfn.pfn.data import PriorTaskSource, collate_tasks
+from ebpfn.pfn.data import PairedPriorTaskSource, PriorTaskSource, collate_tasks
 from ebpfn.priors import build_hyperprior, hyperprior_to_dict
 from ebpfn.utils import RandomStreams
 
@@ -86,3 +86,37 @@ def test_source_loads_exact_tuned_eta_artifact(tmp_path: Path) -> None:
     source = PriorTaskSource.from_eta_file(path, RandomStreams(7))
     assert source.eta == eta
     assert source.streams.base_seed == 7
+
+
+def test_paired_sources_share_draws_but_keep_eta_specific_task_identity() -> None:
+    baseline = build_hyperprior(HyperPriorConfig(log_snr_mean=1.0))
+    perturbed = build_hyperprior(HyperPriorConfig(log_snr_mean=2.0))
+    streams = RandomStreams(7)
+    shape = CharacterizationShape(32, 16, 4, 0, "regression")
+    first_source = PairedPriorTaskSource(baseline, streams, pairing_id="pilot-1")
+    second_source = PairedPriorTaskSource(perturbed, streams, pairing_id="pilot-1")
+
+    first = first_source.sample_batch(3, shape, "train", 0)
+    second = second_source.sample_batch(3, shape, "train", 0)
+
+    assert all(a.probe_fit.X.equals(b.probe_fit.X) for a, b in zip(first, second, strict=True))
+    assert all(a.probe_score.X.equals(b.probe_score.X) for a, b in zip(first, second, strict=True))
+    assert all(a.task_id != b.task_id for a, b in zip(first, second, strict=True))
+    assert first_source.stream_provenance == {
+        "version": "paired-prior-task-source-1",
+        "base_seed": 7,
+        "common_random_numbers": True,
+        "pairing_id": "pilot-1",
+    }
+
+
+def test_pairing_id_separates_paired_experiments() -> None:
+    eta = build_hyperprior(HyperPriorConfig())
+    streams = RandomStreams(7)
+    shape = CharacterizationShape(32, 16, 4, 0, "regression")
+
+    first = PairedPriorTaskSource(eta, streams, pairing_id="pilot-1").sample_batch(1, shape, "train", 0)[0]
+    second = PairedPriorTaskSource(eta, streams, pairing_id="pilot-2").sample_batch(1, shape, "train", 0)[0]
+
+    assert first.task_id != second.task_id
+    assert not first.probe_fit.X.equals(second.probe_fit.X)

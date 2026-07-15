@@ -206,11 +206,54 @@ class TuningStudyModeConfig(StrictConfigModel):
         return self
 
 
+class ApparentSnrCalibrationConfig(StrictConfigModel):
+    """Predeclared baseline-prior calibration gate over source-frozen real tasks."""
+
+    output_dir: str = "benchmarks/results/calibration/g1_shape_matched"
+    characterization_dir: str = "benchmarks/results/characterization"
+    source_roles_path: str = "configs/source_roles.json"
+    source_role: Literal["pilot"] = "pilot"
+    n_synthetic_per_target: int = 16
+    max_abs_source_weighted_gap: float = 0.1
+    energy_competitive_tolerance: float = 0.01
+    log_snr_mean_candidates: tuple[float, ...] = (0.7, 1.2, 1.7, 2.2, 2.7, 3.0)
+    snr_dispersion_candidates: tuple[float, ...] = (0.2, 0.35, 0.5, 0.8, 1.1, 1.4)
+
+    @field_validator("log_snr_mean_candidates", "snr_dispersion_candidates", mode="before")
+    @classmethod
+    def freeze_candidate_grid(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "ApparentSnrCalibrationConfig":
+        paths = (self.output_dir, self.characterization_dir, self.source_roles_path)
+        if any(not path for path in paths):
+            raise ValueError("calibration paths must be nonempty")
+        if self.n_synthetic_per_target < 1:
+            raise ValueError("calibration synthetic task count must be positive")
+        if not 0.0 < self.max_abs_source_weighted_gap < 2.0:
+            raise ValueError("calibration gap tolerance must be in (0, 2)")
+        if self.energy_competitive_tolerance <= 0.0:
+            raise ValueError("calibration energy competitive tolerance must be positive")
+        if not self.log_snr_mean_candidates or not self.snr_dispersion_candidates:
+            raise ValueError("calibration candidate grids must be nonempty")
+        if tuple(sorted(set(self.log_snr_mean_candidates))) != self.log_snr_mean_candidates:
+            raise ValueError("log-SNR candidate means must be unique and increasing")
+        if tuple(sorted(set(self.snr_dispersion_candidates))) != self.snr_dispersion_candidates:
+            raise ValueError("SNR dispersion candidates must be unique and increasing")
+        if any(not -2.0 <= value <= 3.0 for value in self.log_snr_mean_candidates):
+            raise ValueError("log-SNR candidate means must lie in [-2, 3]")
+        if any(value <= 0.0 for value in self.snr_dispersion_candidates):
+            raise ValueError("SNR dispersion candidates must be positive")
+        return self
+
+
 class TuningStudyConfig(StrictConfigModel):
     """Step 4 planted/null recovery and search-protocol study."""
 
     mode: TuningStudyModeConfig
     tuning: TuningConfig = TuningConfig()
+    calibration: ApparentSnrCalibrationConfig = ApparentSnrCalibrationConfig()
     # Each planted scenario shifts one active knob by planted_unit_shift in vectorized [0,1] space,
     # so perturbations (and parameter_error) are comparable across knobs. log_snr_mean is kept as one
     # knob for a direct comparison against the structural levers. Every entry must be in tuning.active.
@@ -260,4 +303,8 @@ class TuningStudyConfig(StrictConfigModel):
             and self.single_task_regularization_decision != self.tuning.search.single_task_regularization
         ):
             raise ValueError("regularization decision must match the resulting tuning config")
+        if self.tuning.prior.log_snr_mean not in self.calibration.log_snr_mean_candidates:
+            raise ValueError("calibration log-SNR grid must include the baseline prior")
+        if self.tuning.prior.snr_dispersion not in self.calibration.snr_dispersion_candidates:
+            raise ValueError("calibration SNR-dispersion grid must include the baseline prior")
         return self

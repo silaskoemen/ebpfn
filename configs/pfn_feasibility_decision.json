@@ -1,0 +1,111 @@
+{
+  "decision_version": "pfn-feasibility-decision-1",
+  "status": "resolved_with_host_safe_allocator",
+  "decision_date": "2026-07-15",
+  "decision_owner": "ebpfn-v1",
+  "device": "mps",
+  "architecture": {
+    "parameters": 27798640,
+    "embed_dim": 128,
+    "col_num_blocks": 3,
+    "row_num_blocks": 3,
+    "icl_num_blocks": 12
+  },
+  "training_batch": {
+    "microbatch_tasks": 1,
+    "gradient_accumulation_steps": 16,
+    "effective_tasks_per_step": 16
+  },
+  "context_decision": {
+    "anchor_rows": 640,
+    "realized_q90_rows": 979.5,
+    "max_context": 1024,
+    "features": 100
+  },
+  "sustained_training_observation": {
+    "date": "2026-07-15",
+    "requested_steps": 100,
+    "durable_checkpoint_step": 50,
+    "last_logged_step": 51,
+    "outcome": "operator_stopped",
+    "reason": "system memory was full, swap reached approximately 16 GB, and macOS became visibly unresponsive",
+    "interpretation": "isolated feasibility cells cleared the MPS cache and did not establish sustained jittered-training feasibility"
+  },
+  "allocator_policy": {
+    "mps_memory_fraction": 0.6,
+    "recommended_max_memory_bytes": 26800603136,
+    "effective_cap_bytes": 16080361881,
+    "release_inactive_cache_after_each_optimizer_step": true,
+    "failure_policy": "raise allocator OOM before host swap exhaustion"
+  },
+  "guarded_validation": {
+    "worst_cell": {
+      "rows": 1024,
+      "features": 100,
+      "tasks": 1,
+      "status": "ok",
+      "train_ms": 1431.9978749069076,
+      "infer_ms": 504.54097194597125,
+      "mps_driver_allocated_mb": 13332.021248
+    },
+    "jitter_smoke": {
+      "optimizer_steps": 10,
+      "gradient_accumulation_steps": 16,
+      "status": "pass",
+      "first_window_loss": 2.2996875743071237,
+      "last_window_loss": 2.0964162151018777,
+      "system_memory_free_percent_after": 86
+    },
+    "baseline_resume": {
+      "steps": "50 to 60",
+      "runtime_seconds": 163.44059820799157,
+      "minimum_observed_system_memory_free_percent": 47,
+      "additional_swapouts": 0,
+      "status": "complete"
+    },
+    "paired_fresh_run": {
+      "eta_label": "corr_strength_perturbed",
+      "steps": 60,
+      "runtime_seconds": 911.944723749999,
+      "minimum_observed_system_memory_free_percent": 51,
+      "additional_swapouts": 0,
+      "status": "complete"
+    }
+  },
+  "cells": [
+    {
+      "rows": 640,
+      "features": 100,
+      "tasks": 16,
+      "status": "oom",
+      "error": "MPS out of memory after approximately 40.5 GiB was allocated"
+    },
+    {
+      "rows": 640,
+      "features": 100,
+      "tasks": 1,
+      "status": "ok",
+      "train_ms": 1344.081582967192,
+      "infer_ms": 545.999875292182,
+      "memory_mb": 9674.58816,
+      "projected_1000_step_train_hours_with_accumulation": 5.973695924298631
+    },
+    {
+      "rows": 1024,
+      "features": 100,
+      "tasks": 1,
+      "status": "ok",
+      "train_ms": 2825.1680838875473,
+      "infer_ms": 954.6707919798791,
+      "memory_mb": 12258.279424,
+      "projected_1000_step_train_hours_with_accumulation": 12.556302595055765
+    },
+    {
+      "rows": 4096,
+      "features": 100,
+      "tasks": 1,
+      "status": "runtime_infeasible",
+      "reason": "The warmup-and-measured profiling cycle did not complete within the operational timeout"
+    }
+  ]
+}

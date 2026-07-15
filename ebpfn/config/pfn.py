@@ -39,7 +39,7 @@ class PfnArchConfig(StrictConfigModel):
     feature_group_size: int = 3
     n_cls_cols: int = 4
     n_cls_rows: int = 128
-    max_context: int = 4096
+    max_context: int = 1024
 
     @model_validator(mode="after")
     def validate_values(self) -> "PfnArchConfig":
@@ -74,14 +74,16 @@ class PfnArchConfig(StrictConfigModel):
 class PfnTrainConfig(StrictConfigModel):
     """Optimizer schedule, shape policy, and the prior the PFN trains against.
 
-    Each step samples ``tasks_per_step`` tasks at one jittered shape (the shape is
-    homogeneous within a step so the backbone sees one ``(n_rows, n_cols)``). The
-    anchor is the mean of the jittered shape distribution; ``jitter`` widens it.
+    Each optimizer step samples microbatches of ``tasks_per_step`` tasks at one
+    jittered shape. ``gradient_accumulation_steps`` controls how many microbatches
+    form the effective batch. The anchor is the mean of the jittered shape
+    distribution; ``jitter`` widens it.
     """
 
     seed: int = 0
     steps: int = 1000
-    tasks_per_step: int = 16
+    tasks_per_step: int = 1
+    gradient_accumulation_steps: int = 16
     lr: float = 3e-4
     weight_decay: float = 1e-2
     warmup_steps: int = 100
@@ -98,10 +100,12 @@ class PfnTrainConfig(StrictConfigModel):
     def validate_values(self) -> "PfnTrainConfig":
         if self.seed < 0:
             raise ValueError("seed must be nonnegative")
-        if min(self.steps, self.tasks_per_step, self.checkpoint_interval) < 1:
-            raise ValueError("steps, tasks_per_step, and checkpoint_interval must be positive")
-        if self.warmup_steps < 0 or self.warmup_steps > self.steps:
-            raise ValueError("warmup_steps must be in [0, steps]")
+        if min(self.steps, self.tasks_per_step, self.gradient_accumulation_steps, self.checkpoint_interval) < 1:
+            raise ValueError(
+                "steps, tasks_per_step, gradient_accumulation_steps, and checkpoint_interval must be positive"
+            )
+        if self.warmup_steps < 0:
+            raise ValueError("warmup_steps must be nonnegative")
         if self.lr <= 0.0 or self.weight_decay < 0.0 or self.grad_clip <= 0.0:
             raise ValueError("lr and grad_clip must be positive and weight_decay nonnegative")
         if min(self.anchor_probe_fit, self.anchor_probe_score) < 1 or self.anchor_features < 1:

@@ -10,6 +10,9 @@ from ebpfn.data.rotations import materialize_tasks
 from ebpfn.data.rotations import rotation_diagnostics
 from ebpfn.data.splits import EligibilityReport
 from ebpfn.data.splits import create_source_split
+from ebpfn.data.source_roles import SourceRoleSplit
+from ebpfn.data.source_roles import load_source_role_split
+from ebpfn.data.source_roles import source_role_split_from_dict
 from ebpfn.data.tasks import TaskBuildResult
 from ebpfn.data.tasks import build_evaluation_task
 from ebpfn.data.types import CharacterizationShape
@@ -32,6 +35,7 @@ __all__ = [
     "RawTabularTask",
     "RotationDefinition",
     "RotationDiagnostics",
+    "SourceRoleSplit",
     "SourceSplit",
     "TaskBuildResult",
     "TaskPartition",
@@ -41,6 +45,8 @@ __all__ = [
     "content_hash",
     "create_source_split",
     "evaluation_task_hash",
+    "load_source_role_split",
+    "source_role_split_from_dict",
     "fit_feature_transform",
     "infer_feature_schema",
     "materialize_tasks",

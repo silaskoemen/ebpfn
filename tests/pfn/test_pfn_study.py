@@ -1,7 +1,10 @@
+import json
 from pathlib import Path
 
 from benchmarks.studies.pfn_feasibility import write_study_artifacts
 from ebpfn.config.pfn import PfnArchConfig, PfnStudyConfig, PfnStudyModeConfig, PfnTrainConfig
+from ebpfn.config.prior import ShapeJitterConfig
+from ebpfn.pfn.train import MPS_MEMORY_FRACTION
 
 
 def _config() -> PfnStudyConfig:
@@ -40,6 +43,18 @@ def test_default_output_grid_is_the_frozen_256_bin_protocol() -> None:
     assert arch.n_bins == 256
     assert arch.target_inner_bound == 5.0
     assert arch.target_tail_scale == 1.0
+
+
+def test_frozen_feasibility_decision_matches_default_configs() -> None:
+    project_root = Path(__file__).parents[2]
+    decision = json.loads((project_root / "configs" / "pfn_feasibility_decision.json").read_text())
+
+    assert decision["status"] == "resolved_with_host_safe_allocator"
+    assert MPS_MEMORY_FRACTION == decision["allocator_policy"]["mps_memory_fraction"]
+    assert PfnArchConfig().max_context == decision["context_decision"]["max_context"]
+    assert ShapeJitterConfig().n_max == decision["context_decision"]["max_context"]
+    assert PfnTrainConfig().tasks_per_step == decision["training_batch"]["microbatch_tasks"]
+    assert PfnTrainConfig().gradient_accumulation_steps == decision["training_batch"]["gradient_accumulation_steps"]
 
 
 def test_write_study_artifacts_emits_expected_files(tmp_path: Path) -> None:

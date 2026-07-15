@@ -39,6 +39,17 @@ tuning:
     root: .cache/tuning-step4
     cache_version: tuning-cache-3
 
+calibration:
+  output_dir: benchmarks/results/calibration/g1_shape_matched
+  characterization_dir: benchmarks/results/characterization
+  source_roles_path: configs/source_roles.json
+  source_role: pilot
+  n_synthetic_per_target: 16
+  max_abs_source_weighted_gap: 0.1
+  energy_competitive_tolerance: 0.01
+  log_snr_mean_candidates: [0.7, 1.2, 1.7, 2.2, 2.7, 3.0]
+  snr_dispersion_candidates: [0.2, 0.35, 0.5, 0.8, 1.1, 1.4]
+
 planted_unit_shift: 0.25
 planted_knobs:
   - corr_strength_mean
@@ -47,7 +58,7 @@ planted_knobs:
 prior_distance_penalty: 0.08
 competitive_tolerance: 0.02
 decision_owner: ebpfn-v1
-decision_date: "2026-07-13"
+decision_date: "2026-07-14"
 multiresolution_decision: geometric_uniform_frozen_minimum_256
 synthetic_failure_decision: raise
 single_task_regularization_decision: prior_distance

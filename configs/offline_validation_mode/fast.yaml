@@ -1,0 +1,34 @@
+# @package _global_
+mode:
+  name: fast
+  output_dir: benchmarks/results/offline_validation/fast
+  pairing_id: step5-training-smoke-1
+  baseline_eta_path: configs/eta_0.json
+  source_roles_path: configs/source_roles.json
+  seeds: [0]
+  eta_labels: [eta_0, corr_strength_perturbed]
+  perturbed_corr_strength_mean: 0.6
+
+# Tiny architecture and schedule for artifact/restart validation only.
+arch:
+  n_bins: 32
+  embed_dim: 16
+  col_num_blocks: 1
+  row_num_blocks: 1
+  icl_num_blocks: 1
+  col_nhead: 2
+  row_nhead: 2
+  icl_nhead: 2
+  n_cls_rows: 8
+
+train:
+  steps: 4
+  tasks_per_step: 2
+  gradient_accumulation_steps: 1
+  lr: 2e-3
+  warmup_steps: 0
+  device: cpu
+  checkpoint_interval: 2
+  anchor_probe_fit: 32
+  anchor_probe_score: 16
+  anchor_features: 4

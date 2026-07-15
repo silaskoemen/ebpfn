@@ -5,7 +5,7 @@ mode:
   smoke_steps: 60
   profile_rows: [64, 256]
   profile_features: [8, 32]
-  profile_tasks: 2
+  profile_tasks: 8
 
 arch:
   n_bins: 200
@@ -21,6 +21,7 @@ arch:
 train:
   steps: 60
   tasks_per_step: 8
+  gradient_accumulation_steps: 1
   warmup_steps: 5
   device: cpu
   anchor_probe_fit: 96

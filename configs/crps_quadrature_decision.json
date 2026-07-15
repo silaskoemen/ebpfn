@@ -1,0 +1,26 @@
+{
+  "decision_version": "crps-quadrature-decision-1",
+  "decision_date": "2026-07-15",
+  "decision_owner": "ebpfn-v1",
+  "status": "frozen",
+  "selected_grid_size": 256,
+  "reference_grid_size": 4096,
+  "evaluation": {
+    "n_rows": 32,
+    "n_bins": 256,
+    "standardized_target_range": [-4.0, 4.0],
+    "logit_seed": 1,
+    "paired_logit_perturbation_sd": 0.1
+  },
+  "absolute_score_error_vs_reference": {
+    "grid_128": {"max": 0.06067001819610596, "mean": 0.019129084423184395},
+    "grid_256": {"max": 0.03648495674133301, "mean": 0.010700300335884094},
+    "grid_512": {"max": 0.015152931213378906, "mean": 0.005088184028863907}
+  },
+  "paired_difference_error_vs_reference": {
+    "grid_128": {"max": 0.001232147216796875, "mean": 0.0003817342221736908},
+    "grid_256": {"max": 0.0007811784744262695, "mean": 0.00019241496920585632},
+    "grid_512": {"max": 0.0003440380096435547, "mean": 0.00009680166840553284}
+  },
+  "rationale": "CRPS is a corroborating metric and Step 5 uses matched eta differences. A 256-point grid halves the previous cost while keeping paired-difference error below 0.001 in the bounded check. Absolute CRPS values remain quadrature approximations and are not used as the primary decision metric."
+}

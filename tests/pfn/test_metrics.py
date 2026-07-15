@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 from ebpfn.pfn.distribution import BarDistribution, fixed_borders
-from ebpfn.pfn.metrics import compute_metrics, to_raw
+from ebpfn.pfn.metrics import compute_metrics, compute_row_metrics, to_raw
 
 
 def _calibrated_gaussian_logits(borders: torch.Tensor, n: int) -> torch.Tensor:
@@ -44,3 +44,21 @@ def test_to_raw_applies_batched_task_statistics_by_row() -> None:
         target_std=torch.tensor([2.0, 0.5]),
     )
     assert torch.allclose(raw, torch.tensor([[5.0, 7.0, 3.0], [-2.0, -1.5, -2.5]]))
+
+
+def test_aggregate_metrics_reproduce_from_row_contributions() -> None:
+    borders = fixed_borders(32)
+    distribution = BarDistribution(borders)
+    logits = torch.randn(7, 32)
+    y = torch.randn(7)
+
+    rows = compute_row_metrics(distribution, logits, y, crps_grid_size=64)
+    aggregate = compute_metrics(distribution, logits, y, crps_grid_size=64)
+
+    assert aggregate.nll == pytest.approx(float(rows.nll.mean()))
+    assert aggregate.crps == pytest.approx(float(rows.crps.mean()))
+    assert aggregate.mae == pytest.approx(float(rows.absolute_error.mean()))
+    assert aggregate.rmse == pytest.approx(float(torch.sqrt(rows.squared_error.mean())))
+    assert aggregate.coverage == {
+        level: pytest.approx(float(inside.float().mean())) for level, (_, _, inside) in rows.intervals.items()
+    }

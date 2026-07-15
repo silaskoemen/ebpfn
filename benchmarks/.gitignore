@@ -6,4 +6,5 @@
 **/*.csv
 **/*.png
 **/*.sqlite
+**/*.pt
 results/**/*.md

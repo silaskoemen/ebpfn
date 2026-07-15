@@ -26,6 +26,18 @@ class PredictiveMetrics:
     n: int
 
 
+@dataclasses.dataclass(frozen=True)
+class PredictiveRowMetrics:
+    """Per-prediction contributions from one predictive distribution."""
+
+    nll: Tensor
+    crps: Tensor
+    mean: Tensor
+    absolute_error: Tensor
+    squared_error: Tensor
+    intervals: dict[str, tuple[Tensor, Tensor, Tensor]]
+
+
 def to_raw(values: Tensor, target_mean: Tensor, target_std: Tensor) -> Tensor:
     """Map standardized predictions/targets back to the original target scale."""
     while target_mean.ndim < values.ndim:
@@ -40,6 +52,7 @@ def compute_metrics(
     y_std: Tensor,
     *,
     coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
+    crps_grid_size: int = 512,
 ) -> PredictiveMetrics:
     """Aggregate predictive metrics over every (row) prediction in ``logits``/``y_std``.
 
@@ -47,28 +60,50 @@ def compute_metrics(
     Interval coverage uses central intervals: for nominal ``p`` the interval is
     ``[icdf((1-p)/2), icdf((1+p)/2)]``.
     """
+    rows = compute_row_metrics(
+        distribution,
+        logits,
+        y_std,
+        coverage_levels=coverage_levels,
+        crps_grid_size=crps_grid_size,
+    )
+    coverage = {level: float(inside.float().mean()) for level, (_, _, inside) in rows.intervals.items()}
+
+    return PredictiveMetrics(
+        nll=float(rows.nll.mean()),
+        crps=float(rows.crps.mean()),
+        mae=float(rows.absolute_error.mean()),
+        rmse=float(torch.sqrt(rows.squared_error.mean())),
+        coverage=coverage,
+        n=int(rows.nll.numel()),
+    )
+
+
+def compute_row_metrics(
+    distribution: BarDistribution,
+    logits: Tensor,
+    y_std: Tensor,
+    *,
+    coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
+    crps_grid_size: int = 512,
+) -> PredictiveRowMetrics:
+    """Return row-level proper-score, point-error, and interval contributions."""
+    if crps_grid_size < 2:
+        raise ValueError("crps_grid_size must be at least two")
     flat_logits = logits.reshape(-1, distribution.n_bins)
     flat_y = y_std.reshape(-1)
-
-    nll = distribution.nll(flat_logits, flat_y).mean()
-    crps = distribution.crps(flat_logits, flat_y).mean()
     mean = distribution.mean(flat_logits)
     errors = mean - flat_y
-    mae = errors.abs().mean()
-    rmse = torch.sqrt((errors**2).mean())
-
-    coverage: dict[str, float] = {}
+    intervals: dict[str, tuple[Tensor, Tensor, Tensor]] = {}
     for level in coverage_levels:
         lower = distribution.icdf(flat_logits, (1.0 - level) / 2.0)
         upper = distribution.icdf(flat_logits, (1.0 + level) / 2.0)
-        inside = (flat_y >= lower) & (flat_y <= upper)
-        coverage[f"{level:g}"] = float(inside.float().mean())
-
-    return PredictiveMetrics(
-        nll=float(nll),
-        crps=float(crps),
-        mae=float(mae),
-        rmse=float(rmse),
-        coverage=coverage,
-        n=int(flat_y.numel()),
+        intervals[f"{level:g}"] = (lower, upper, (flat_y >= lower) & (flat_y <= upper))
+    return PredictiveRowMetrics(
+        nll=distribution.nll(flat_logits, flat_y),
+        crps=distribution.crps(flat_logits, flat_y, grid_size=crps_grid_size),
+        mean=mean,
+        absolute_error=errors.abs(),
+        squared_error=errors**2,
+        intervals=intervals,
     )

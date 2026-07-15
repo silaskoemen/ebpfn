@@ -1,0 +1,15 @@
+{
+  "policy_version": "source-role-split-1",
+  "pilot_source_ids": [
+    "openml-dataset-43919",
+    "openml-dataset-43338",
+    "openml-dataset-44969",
+    "openml-dataset-42903"
+  ],
+  "confirmatory_source_ids": [
+    "openml-dataset-4353",
+    "openml-dataset-189",
+    "openml-dataset-43174",
+    "openml-dataset-42370"
+  ]
+}
