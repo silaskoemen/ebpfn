@@ -1,0 +1,116 @@
+{
+  "decision_version": "pfn-training-schedule-pilot-1",
+  "status": "schedule_instability",
+  "decision_date": "2026-07-16",
+  "eta_labels": [
+    "eta_0",
+    "corr_strength_perturbed"
+  ],
+  "seeds": [
+    0
+  ],
+  "warmup_steps": 100,
+  "initial_horizon": 200,
+  "conditional_max_horizon": 400,
+  "checkpoint_interval": 50,
+  "plateau_rule": {
+    "required_consecutive_intervals": 2,
+    "max_nll_improvement_per_eta": 0.01,
+    "max_paired_nll_contrast_change": 0.005,
+    "crps_guard": "no_material_worsening"
+  },
+  "horizon_200_observation": {
+    "panel_nll_std": {
+      "eta_0": {
+        "100": 1.4052753577008843,
+        "150": 1.4042056397348643,
+        "200": 1.423525342270732
+      },
+      "corr_strength_perturbed": {
+        "100": 1.4046554818376897,
+        "150": 1.4027773230150342,
+        "200": 1.4184325831755995
+      }
+    },
+    "nll_improvement": {
+      "eta_0_100_to_150": 0.0010697179660200,
+      "eta_0_150_to_200": -0.0193197025358677,
+      "corr_strength_perturbed_100_to_150": 0.0018781588226555,
+      "corr_strength_perturbed_150_to_200": -0.0156552601605653
+    },
+    "paired_nll_contrast": {
+      "100": -0.0006198758631946,
+      "150": -0.0014283167198301,
+      "200": -0.0050927590951325
+    },
+    "assessment": "fail",
+    "reason": "The 150-to-200 interval materially worsened source-weighted NLL for both eta models, so it is not a stable qualifying interval despite a stable paired contrast and only small CRPS movement."
+  },
+  "horizon_400_observation": {
+    "panel_nll_std": {
+      "eta_0": {
+        "200": 1.423525342270732,
+        "250": 1.3984908353029095,
+        "300": 1.4039763513886146,
+        "350": 1.397711074233437,
+        "400": 1.4040184613523266
+      },
+      "corr_strength_perturbed": {
+        "200": 1.4184325831755995,
+        "250": 1.3904825586001437,
+        "300": 1.4008620085315775,
+        "350": 1.2843071801210737,
+        "400": 1.2521726279155025
+      }
+    },
+    "panel_crps_std": {
+      "eta_0": {
+        "200": 0.5765772783523425,
+        "250": 0.5748173056812534,
+        "300": 0.5740064539789717,
+        "350": 0.5726606790621968,
+        "400": 0.575605630384183
+      },
+      "corr_strength_perturbed": {
+        "200": 0.5763161800568923,
+        "250": 0.5742282318175278,
+        "300": 0.5742574857529647,
+        "350": 0.5047913767855799,
+        "400": 0.4870003129647237
+      }
+    },
+    "intervals": {
+      "200_to_250": {
+        "eta_0_nll_improvement": 0.0250345069678225,
+        "corr_strength_perturbed_nll_improvement": 0.0279500245754558,
+        "paired_nll_contrast_change": -0.0029155167976333
+      },
+      "250_to_300": {
+        "eta_0_nll_improvement": -0.0054855160857051,
+        "corr_strength_perturbed_nll_improvement": -0.0103794499314338,
+        "paired_nll_contrast_change": 0.0048939338457287
+      },
+      "300_to_350": {
+        "eta_0_nll_improvement": 0.0062652771551776,
+        "corr_strength_perturbed_nll_improvement": 0.1165548284105038,
+        "paired_nll_contrast_change": -0.1102895505656814
+      },
+      "350_to_400": {
+        "eta_0_nll_improvement": -0.0063073871188896,
+        "corr_strength_perturbed_nll_improvement": 0.0321345522055712,
+        "paired_nll_contrast_change": -0.0384419390493177
+      }
+    },
+    "paired_nll_contrast": {
+      "200": -0.0050927590951325,
+      "250": -0.0080082767027658,
+      "300": -0.0031143428570371,
+      "350": -0.1134038941123633,
+      "400": -0.1518458334368241
+    },
+    "selected_steps": null,
+    "assessment": "schedule_instability",
+    "reason": "No checkpoint through 400 completed two consecutive qualifying intervals. The perturbed model was still changing materially after step 300, and the paired NLL contrast changes from 300-to-350 and 350-to-400 exceeded the frozen 0.005 threshold by large margins. Step 400 is not silently adopted."
+  },
+  "horizon_rule": "At 200, freeze the earliest checkpoint with two consecutive qualifying 50-step intervals. If none qualifies, extend both eta models to 400 and apply the same rule over checkpoints 250, 300, 350, and 400. If still absent, record schedule instability."
+}
