@@ -57,7 +57,7 @@ class NanoTabICLv2(nn.Module):
         self.out_ln = nn.LayerNorm(icl_dim)
         self.out_mlp = get_mlp(icl_dim, icl_dim * 2, out_dim)
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, y: torch.Tensor, return_embedding: bool = False) -> torch.Tensor:
         n_batch, n_rows, n_cols = x.shape
         n_batch, n_train = y.shape
 
@@ -90,7 +90,10 @@ class NanoTabICLv2(nn.Module):
             emb = block(emb, kv_max_idx=n_train)  # all rows only attend to training rows
         emb = self.icl_blocks[-1](emb[:, n_train:], emb[:, :n_train])  # need only test predictions
 
-        return self.out_mlp(self.out_ln(emb))  # output MLP
+        emb = self.out_ln(emb)  # normalized pre-head representation
+        if return_embedding:
+            return emb  # in-context embedding z: (n_batch, n_test, icl_dim)
+        return self.out_mlp(emb)  # output MLP
 
 
 class ClassEmbedding(nn.Embedding):

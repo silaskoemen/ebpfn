@@ -51,13 +51,17 @@ class EBPFNModel(nn.Module):
     def n_bins(self) -> int:
         return self.distribution.n_bins
 
-    def forward(self, x: Tensor, y_train: Tensor) -> Tensor:
+    def forward(self, x: Tensor, y_train: Tensor, return_embedding: bool = False) -> Tensor:
         """Bin logits for the test rows: ``(B, n_test, n_bins)``.
 
         ``x`` is ``(B, n_rows, n_cols)`` with the ``n_train`` context rows first;
         ``y_train`` is ``(B, n_train)`` standardized targets for those rows.
+
+        With ``return_embedding=True`` returns the in-context embedding instead —
+        the normalized pre-head representation ``(B, n_test, icl_dim)`` used as the
+        characterization ``z`` for prior tuning (see ``plans/v2.md``).
         """
-        return self.backbone(x, y_train)
+        return self.backbone(x, y_train, return_embedding=return_embedding)
 
     def loss(self, batch: TaskBatch) -> Tensor:
         """Mean bar-distribution NLL of the query targets — the training objective."""
@@ -70,5 +74,19 @@ class EBPFNModel(nn.Module):
         self.eval()
         try:
             return self(x, y_train)
+        finally:
+            self.train(was_training)
+
+    @torch.no_grad()
+    def embed(self, x: Tensor, y_train: Tensor) -> Tensor:
+        """Frozen in-context embedding of the test rows: ``(B, n_test, icl_dim)``.
+
+        The characterization ``z`` for prior tuning — a plain frozen forward pass,
+        no head. See ``plans/v2.md`` for how it is used.
+        """
+        was_training = self.training
+        self.eval()
+        try:
+            return self(x, y_train, return_embedding=True)
         finally:
             self.train(was_training)
