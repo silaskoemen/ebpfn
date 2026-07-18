@@ -59,7 +59,7 @@ class EBPFNModel(nn.Module):
 
         With ``return_embedding=True`` returns the in-context embedding instead —
         the normalized pre-head representation ``(B, n_test, icl_dim)`` used as the
-        characterization ``z`` for prior tuning (see ``plans/v2.md``).
+        characterization ``z`` for prior tuning (see ``PLAN.md``).
         """
         return self.backbone(x, y_train, return_embedding=return_embedding)
 
@@ -82,7 +82,7 @@ class EBPFNModel(nn.Module):
         """Frozen in-context embedding of the test rows: ``(B, n_test, icl_dim)``.
 
         The characterization ``z`` for prior tuning — a plain frozen forward pass,
-        no head. See ``plans/v2.md`` for how it is used.
+        no head. See ``PLAN.md`` for how it is used.
         """
         was_training = self.training
         self.eval()

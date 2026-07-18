@@ -70,7 +70,7 @@ def realize(hp: ScmHyperPrior, n: int, p: int, shared: SharedTheta, rng: np.rand
     # SNR knob alone sets the ceiling; the n_hidden nodes only drive feature
     # correlation, never confound y. This is a MODE, not a law -- a "free" mode
     # (features at arbitrary nodes, TabICL-style) would admit genuine unobserved
-    # confounding but void SNR calibration. Deferred; see plans/v1/decisions.md D5.
+    # confounding but void SNR calibration. Deferred; see PLAN.md (D5, open questions).
     ordered = np.concatenate([rng.permutation(pa_y), rng.permutation(rest)])
     x_nodes = ordered[:p]
     # Observed features that are direct causes of the target (its realized active set).

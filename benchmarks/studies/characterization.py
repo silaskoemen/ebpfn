@@ -973,8 +973,7 @@ def run_study(
         # Real-arm evidence: this run must BE a real-dataset run with >= 5 repeats. Synthetic
         # runs deliberately fail this (their job is the null/response arm via the null mechanism),
         # so a synth audit reads "incomplete" until paired with a real audit run. The two decision
-        # logs together are the real+synth confirmation (plans/v1/02_characterization.md, "Fast and
-        # audit modes").
+        # logs together are the real+synth confirmation (D2 characterization; see PLAN.md).
         "representative_real_task_repeats": (not _is_synthetic_dataset(config)) and config.repeats >= 5,
     }
     status, blocking_reasons = derive_study_status(config.mode.name, checks)

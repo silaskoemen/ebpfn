@@ -1,4 +1,4 @@
-"""E1 reachability diagnostic (V2, see ``plans/v2.md``).
+"""E1 reachability diagnostic (V2, see ``PLAN.md``).
 
 Question: can the prior generate datasets that reach real datasets' points in the
 frozen base PFN's embedding space? If a real point is off the prior's reachable
@@ -100,6 +100,10 @@ def run(checkpoint: Path, n_prior: int, k: int, batch_size: int) -> pl.DataFrame
         shapes[name] = characterization_shape(task)
 
     records: list[dict] = []
+    emb_clouds: list[np.ndarray] = []
+    emb_reals: list[np.ndarray] = []
+    emb_names: list[str] = []
+    emb_sizes: list[int] = []
     for name, tasks in by_dataset.items():
         shape = shapes[name]
         try:
@@ -108,6 +112,10 @@ def run(checkpoint: Path, n_prior: int, k: int, batch_size: int) -> pl.DataFrame
             print(f"{name:<16} PRIOR-SAMPLE-FAIL: {type(error).__name__}: {error}")
             continue
         real_z = np.stack([pooled_embed(model, collate_tasks([t]), device)[0] for t in tasks])
+        emb_clouds.append(prior_z)
+        emb_reals.append(real_z.mean(0))
+        emb_names.append(name)
+        emb_sizes.append(len(prior_z))
         mean, std = prior_z.mean(0), prior_z.std(0) + 1e-6
         intra = float(np.median(whitened_knn(prior_z, prior_z, mean, std, k, drop_self=True)))
         d_real = whitened_knn(real_z, prior_z, mean, std, k, drop_self=False)  # (n_repeats,)
@@ -142,6 +150,13 @@ def run(checkpoint: Path, n_prior: int, k: int, batch_size: int) -> pl.DataFrame
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_DIR / "reachability.parquet")
+    np.savez(
+        OUT_DIR / "embeddings.npz",
+        prior_z=np.concatenate(emb_clouds),
+        real_z=np.stack(emb_reals),
+        names=np.array(emb_names),
+        prior_sizes=np.array(emb_sizes),
+    )
     (OUT_DIR / "summary.json").write_text(
         json.dumps(
             {

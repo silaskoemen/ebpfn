@@ -94,6 +94,7 @@ docs/_build
 **/raw/**
 !benchmarks/results/raw/.gitkeep
 **/data.npy
+**/*.npz
 examples/m5/*
 
 # Debug files

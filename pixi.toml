@@ -46,6 +46,7 @@ lint = "pre-commit run -a"
 
 [feature.dev.dependencies]
 ipykernel = "*"
+matplotlib = ">=3.11.0,<4"
 
 [feature.build.dependencies]
 python-build = "*"

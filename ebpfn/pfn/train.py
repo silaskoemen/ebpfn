@@ -165,6 +165,7 @@ def train_pfn(
     source: PriorTaskSource | None = None,
     checkpoint_dir: Path | None = None,
     resume_from: Path | None = None,
+    init_weights_from: Path | None = None,
     log_every: int = 50,
     on_step: Callable[[int, float], None] | None = None,
 ) -> tuple[EBPFNModel, TrainResult]:
@@ -173,7 +174,15 @@ def train_pfn(
     ``on_step(step, loss)`` is an optional hook (e.g. an experiment-tracking logger).
     Checkpoints are written every ``train.checkpoint_interval`` steps when
     ``checkpoint_dir`` is set, plus once at the end.
+
+    ``resume_from`` continues an interrupted run and requires an exact eta/config
+    match. ``init_weights_from`` is different: it seeds a **fine-tune** from another
+    checkpoint's weights under a possibly *different* ``source`` eta -- only the
+    architecture must match; optimizer state and step counter start fresh. This is
+    the V2 bounded-fine-tune-from-base mechanism (``PLAN.md``).
     """
+    if resume_from is not None and init_weights_from is not None:
+        raise ValueError("pass at most one of resume_from / init_weights_from")
     device = select_device(train.device)
     configure_device_memory(device)
     streams = RandomStreams(train.seed)
@@ -203,6 +212,11 @@ def train_pfn(
         if len(losses) != start_step:
             raise ValueError("resume checkpoint loss history does not align with its completed step")
         checkpoint_paths.append(resume_from)
+    elif init_weights_from is not None:
+        checkpoint = torch.load(init_weights_from, map_location=device, weights_only=False)
+        if checkpoint["arch"] != arch.model_dump(mode="json"):
+            raise ValueError("init-weights checkpoint architecture does not match the requested architecture")
+        model.load_state_dict(checkpoint["model"])  # weights only: fresh optimizer, start_step=0, new eta allowed
 
     logger.info(
         f"🧠 pfn train | {train.steps} steps | device={device} | n_bins={arch.n_bins} | anchor={anchor} | "
