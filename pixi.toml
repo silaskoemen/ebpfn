@@ -33,7 +33,11 @@ pytest = ">=9.1.0,<10"
 [feature.bench.pypi-dependencies]
 hydra-core = ">=1.3.2,<2"
 openml = ">=0.15.1,<0.16"
-pandas = ">=2.0,<3"
+pandas = "*"
+
+[feature.bench.dependencies]
+catboost = ">=1.2.8,<2"  # 1.2.8+ has numpy-2 (<3) builds; 1.2.5 was built against numpy-1 (ABI break)
+scikit-learn = ">=1.9.0,<2"
 
 [feature.lint.dependencies]
 ruff = "*"
