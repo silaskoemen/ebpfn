@@ -1,0 +1,52 @@
+Vendored third-party code
+=========================
+
+This directory contains a vendored copy of the NanoTabICLv2 *prior* (the TabICLv2
+data-generating process) from:
+
+    Project:  nanotabicl (a minimal TabICLv2 implementation)
+    Source:   https://github.com/soda-inria/nanotabicl
+    File:     prior.py
+    Commit:   ead24e3a1bf2dcda3ec46041a5189c034b6c0a62
+    sha256:   b64bb260feef0841151178272d5921703c7286e498f92e1654d992fb501c13f3
+    License:  BSD-3-Clause (see LICENSE in this directory)
+    Copyright (c) 2025, Soda team @ Inria
+
+Upstream describes it as a slightly simplified TabICLv2 prior that "performs similarly
+well" to the full one. The sha256 above is of the file as fetched, before the edits below.
+
+Modifications relative to upstream `prior.py`
+---------------------------------------------
+The generator's behaviour is unchanged — same mechanisms, same distributions, same
+sampled constants. `prior.py` participates in the normal pre-commit hooks (black, ruff,
+ty) rather than being excluded, so it conforms to the project like any other module:
+
+- annotated the `node_values` placeholder list as `list[Any]` (it holds `None` until each
+  node is filled in topological order, which `ty` cannot see through);
+- removed the upstream `if __name__ == '__main__'` matplotlib plotting demo, which also
+  drops a matplotlib import from a core-dependency module.
+
+Expect further divergence: exposing upstream's hardcoded sampling constants as tunable
+coordinates is the planned next step. Record changes here as they happen.
+
+`tasks.py` in this directory is **ebpfn code, not vendored** — it adapts the upstream
+generator to ebpfn's task contracts (exact `CharacterizationShape`, `TuningTask`,
+deterministic seeding through `RandomStreams`).
+
+Why vendored
+------------
+nanotabicl is not published to PyPI, so the generator is copied in rather than depended
+on. It is here to answer one question: measured at equal training budget on the same
+frozen backbone, does the TabICLv2 prior produce a better model than ebpfn's own
+generator? Our own generator covers real-corpus property ranges poorly (feature skew
+covers 1 of 9 real datasets; 2% of tasks are near-deterministic against 33% in real
+data), which this arm is meant to confirm or refute.
+
+If it wins, the mechanism library gets reimplemented against ebpfn's contracts with
+tunable coordinates and this vendored copy is deleted; if it does not, the copy is
+deleted and the completeness argument was wrong. Either way this directory is temporary.
+
+Relationship to `ebpfn/pfn/nanotabicl/`
+---------------------------------------
+That directory vendors the *model* from the same upstream commit. Its NOTICE previously
+stated that `prior.py` was deliberately not vendored; that statement is superseded here.

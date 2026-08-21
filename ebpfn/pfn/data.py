@@ -23,6 +23,7 @@ from torch import Tensor
 
 from ebpfn.data.types import CharacterizationShape, TaskPartition, TuningTask
 from ebpfn.priors import HyperPrior, hyperprior_from_dict, sample_task
+from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
 
 _TARGET_STD_FLOOR = 1e-6
@@ -136,6 +137,35 @@ class PriorTaskSource:
 
     def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
         return [sample_task(self.eta, shape, self.streams, *identity, member).tuning for member in range(batch_size)]
+
+    def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
+        return collate_tasks(self.sample_batch(batch_size, shape, *identity))
+
+
+class NanopriorTaskSource:
+    """Task source drawing from the vendored TabICLv2 prior instead of an ``eta``.
+
+    The comparison arm for "is their generator better than ours at equal training
+    budget" — same interface as :class:`PriorTaskSource`, so the training loop and the
+    bank are indifferent to which one they are handed. It has no ``eta`` because the
+    upstream generator exposes no hyperparameters; that is the point of the arm, and the
+    reason it can be measured but not yet tuned.
+    """
+
+    def __init__(self, streams: RandomStreams) -> None:
+        self.streams = streams
+
+    @property
+    def stream_provenance(self) -> dict[str, str | int | bool | None]:
+        return {
+            "version": "nanoprior-task-source-1",
+            "base_seed": self.streams.base_seed,
+            "common_random_numbers": False,
+            "pairing_id": None,
+        }
+
+    def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
+        return [nanoprior_sample_task(shape, self.streams, *identity, member).tuning for member in range(batch_size)]
 
     def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
         return collate_tasks(self.sample_batch(batch_size, shape, *identity))

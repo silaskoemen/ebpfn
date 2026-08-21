@@ -12,9 +12,14 @@ This directory contains a vendored copy of the NanoTabICLv2 model from:
 Why vendored
 ------------
 nanotabicl is not published to PyPI, so the model source is copied in rather than
-depended on. ebpfn uses only the transformer *backbone* (RoPE, QASSMax, column/row/
-ICL attention blocks); it trains that backbone on ebpfn's own empirical-Bayes prior.
-nanotabicl's own data-generation prior (`prior.py`) is intentionally NOT vendored.
+depended on. ebpfn uses the transformer *backbone* (RoPE, QASSMax, column/row/ICL
+attention blocks), either trained on ebpfn's own prior or loaded with released
+TabICLv2 weights via `ebpfn/pfn/checkpoints.py` — the architectures are identical,
+so the published checkpoints load into this module directly.
+
+nanotabicl's data-generation prior (`prior.py`) was previously not vendored; it now
+is, under `ebpfn/priors/nanoprior/`, to measure it against ebpfn's own generator.
+See that directory's NOTICE.
 
 Modifications relative to upstream `model.py`
 ---------------------------------------------

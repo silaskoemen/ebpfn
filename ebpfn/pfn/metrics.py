@@ -1,17 +1,42 @@
-"""Predictive metrics for the bar-distribution PFN.
+"""Predictive metrics for regression PFNs.
 
 NLL, CRPS, point error (MAE/RMSE) and interval coverage all come from the single
 predictive density, so they are mutually consistent. Metrics are computed in the
 model's standardized target space (each task standardized on its own ``probe_fit``);
 point error can be reported on the raw scale via :func:`to_raw` when a scale is supplied.
+
+Both heads are supported through :class:`PredictiveDistribution`: our own
+:class:`~ebpfn.pfn.distribution.BarDistribution` and the released TabICLv2 head's
+:class:`~ebpfn.pfn.quantile.QuantileDistribution`. ``outputs`` below is whichever raw
+head output the distribution consumes — bin logits or quantiles.
 """
 
 import dataclasses
+from typing import Protocol
 
 import torch
 from torch import Tensor
 
-from ebpfn.pfn.distribution import BarDistribution
+
+class PredictiveDistribution(Protocol):
+    """The predictive-distribution surface these metrics need from a head.
+
+    The head output is positional-only here: the two implementations name it for what
+    they consume (``logits`` for bins, ``values`` for quantiles) and only ``grid_size``
+    is ever passed by keyword.
+    """
+
+    @property
+    def n_outputs(self) -> int: ...
+
+    def nll(self, outputs: Tensor, y: Tensor, /) -> Tensor: ...
+
+    def crps(self, outputs: Tensor, y: Tensor, /, *, grid_size: int) -> Tensor: ...
+
+    def mean(self, outputs: Tensor, /) -> Tensor: ...
+
+    def icdf(self, outputs: Tensor, q: float, /) -> Tensor: ...
+
 
 _DEFAULT_COVERAGE_LEVELS = (0.5, 0.8, 0.9, 0.95)
 
@@ -47,22 +72,22 @@ def to_raw(values: Tensor, target_mean: Tensor, target_std: Tensor) -> Tensor:
 
 
 def compute_metrics(
-    distribution: BarDistribution,
-    logits: Tensor,
+    distribution: PredictiveDistribution,
+    outputs: Tensor,
     y_std: Tensor,
     *,
     coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
     crps_grid_size: int = 512,
 ) -> PredictiveMetrics:
-    """Aggregate predictive metrics over every (row) prediction in ``logits``/``y_std``.
+    """Aggregate predictive metrics over every (row) prediction in ``outputs``/``y_std``.
 
-    ``logits`` is ``(..., n_bins)`` and ``y_std`` is ``(...)`` in standardized space.
+    ``outputs`` is ``(..., n_outputs)`` and ``y_std`` is ``(...)`` in standardized space.
     Interval coverage uses central intervals: for nominal ``p`` the interval is
     ``[icdf((1-p)/2), icdf((1+p)/2)]``.
     """
     rows = compute_row_metrics(
         distribution,
-        logits,
+        outputs,
         y_std,
         coverage_levels=coverage_levels,
         crps_grid_size=crps_grid_size,
@@ -80,8 +105,8 @@ def compute_metrics(
 
 
 def compute_row_metrics(
-    distribution: BarDistribution,
-    logits: Tensor,
+    distribution: PredictiveDistribution,
+    outputs: Tensor,
     y_std: Tensor,
     *,
     coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
@@ -90,18 +115,18 @@ def compute_row_metrics(
     """Return row-level proper-score, point-error, and interval contributions."""
     if crps_grid_size < 2:
         raise ValueError("crps_grid_size must be at least two")
-    flat_logits = logits.reshape(-1, distribution.n_bins)
+    flat_outputs = outputs.reshape(-1, distribution.n_outputs)
     flat_y = y_std.reshape(-1)
-    mean = distribution.mean(flat_logits)
+    mean = distribution.mean(flat_outputs)
     errors = mean - flat_y
     intervals: dict[str, tuple[Tensor, Tensor, Tensor]] = {}
     for level in coverage_levels:
-        lower = distribution.icdf(flat_logits, (1.0 - level) / 2.0)
-        upper = distribution.icdf(flat_logits, (1.0 + level) / 2.0)
+        lower = distribution.icdf(flat_outputs, (1.0 - level) / 2.0)
+        upper = distribution.icdf(flat_outputs, (1.0 + level) / 2.0)
         intervals[f"{level:g}"] = (lower, upper, (flat_y >= lower) & (flat_y <= upper))
     return PredictiveRowMetrics(
-        nll=distribution.nll(flat_logits, flat_y),
-        crps=distribution.crps(flat_logits, flat_y, grid_size=crps_grid_size),
+        nll=distribution.nll(flat_outputs, flat_y),
+        crps=distribution.crps(flat_outputs, flat_y, grid_size=crps_grid_size),
         mean=mean,
         absolute_error=errors.abs(),
         squared_error=errors**2,

@@ -76,6 +76,11 @@ class BarDistribution(nn.Module):
         return self.borders.numel() - 1
 
     @property
+    def n_outputs(self) -> int:
+        """Head width — the shared name across predictive heads (see ``ebpfn.pfn.metrics``)."""
+        return self.n_bins
+
+    @property
     def widths(self) -> Tensor:
         return self.borders[1:] - self.borders[:-1]
 
