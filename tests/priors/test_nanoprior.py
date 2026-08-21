@@ -9,7 +9,7 @@ import pytest
 import torch
 from ebpfn.data import CharacterizationShape
 from ebpfn.pfn.data import NanopriorTaskSource, collate_tasks
-from ebpfn.priors.nanoprior import MechanismEta, sample_task
+from ebpfn.priors.nanoprior import MechanismEta, prior, sample_task
 from ebpfn.utils import RandomStreams
 
 
@@ -105,3 +105,19 @@ def test_task_source_carries_its_eta() -> None:
 
     assert [task.task_id for task in baseline] != [task.task_id for task in tuned]
     assert collate_tasks(tuned).x.shape == collate_tasks(baseline).x.shape
+
+
+def test_no_signal_targets_are_rejected_by_the_learnability_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upstream's check computes its improvement statistic in float32, where a constant
+    target's rounding error reads as signal and a task with nothing to learn is accepted."""
+    torch.manual_seed(0)
+    x = torch.randn(120, 3)
+    constant = {"x_0": x, "y_0": torch.full((120, 1), -2.75e-4)}
+    learnable = {"x_0": x, "y_0": x.sum(dim=-1, keepdim=True)}
+    drawn = [constant, learnable]
+    monkeypatch.setattr(prior, "rand_dataset_plain", lambda *args, **kwargs: drawn.pop(0))
+
+    accepted = prior.rand_dataset_filtered(x_cat_sizes=[0] * 3, y_cat_sizes=[0], n_samples=120, max_attempts=2)
+
+    assert not drawn, "the constant draw must be rejected and a second one requested"
+    assert accepted is learnable

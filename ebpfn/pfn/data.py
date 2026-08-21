@@ -28,7 +28,9 @@ from ebpfn.priors.nanoprior import MechanismEta
 from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
 
-_TARGET_STD_FLOOR = 1e-6
+# Smallest target spread, relative to the split's own offset, that float32 resolves.
+# Below it there is no scale to standardize by and raw units are used instead.
+_MIN_TARGET_SPREAD = 16 * float(np.finfo(np.float32).eps)
 
 
 def _partition_features(partition: TaskPartition) -> np.ndarray:
@@ -90,7 +92,10 @@ def collate_tasks(tasks: list[TuningTask]) -> TaskBatch:
         y_fit = task.probe_fit.y.astype(np.float32, copy=False)
         y_score = task.probe_score.y.astype(np.float32, copy=False)
         mean = float(y_fit.mean())
-        std = max(float(y_fit.std()), _TARGET_STD_FLOOR)
+        spread = float(y_fit.std())
+        # A constant context carries no scale, so centre it and leave it in raw units.
+        # Dividing by a small floor instead would inflate the query targets by 1/floor.
+        std = spread if spread > _MIN_TARGET_SPREAD * float(np.abs(y_fit).max()) else 1.0
         xs.append(x)
         y_train.append((y_fit - mean) / std)
         y_test.append((y_score - mean) / std)

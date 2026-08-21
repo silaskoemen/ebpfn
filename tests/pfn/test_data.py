@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
 
+import numpy as np
+import polars as pl
 import pytest
 import torch
 from ebpfn.config.pfn import PfnArchConfig
 from ebpfn.config.prior import HyperPriorConfig
-from ebpfn.data.types import CharacterizationShape
+from ebpfn.data.types import CharacterizationShape, FeatureSchema, TaskPartition, TuningTask
 from ebpfn.pfn.data import PairedPriorTaskSource, PriorTaskSource, collate_tasks
 from ebpfn.priors import build_hyperprior, hyperprior_to_dict
 from ebpfn.utils import RandomStreams
@@ -120,3 +122,34 @@ def test_pairing_id_separates_paired_experiments() -> None:
 
     assert first.task_id != second.task_id
     assert not first.probe_fit.X.equals(second.probe_fit.X)
+
+
+def test_constant_context_standardizes_in_raw_units() -> None:
+    """A constant context carries no scale, so the query targets must stay in raw units.
+
+    Dividing by a small floor instead would scale them by 1/floor and spike the loss.
+    """
+    n_fit, n_score, p = 8, 4, 2
+    names = tuple(f"x{i}" for i in range(p))
+    features = np.arange((n_fit + n_score) * p, dtype=float).reshape(-1, p)
+    y_fit = np.full(n_fit, 3.0)
+    y_score = np.array([3.0, 4.0, 2.0, 3.5])
+    row_ids = np.arange(n_fit + n_score)
+    task = TuningTask(
+        task_id="constant-context",
+        source_id="synthetic",
+        task_type="regression",
+        outer_split_id="synthetic-outer",
+        characterization_split_id="synthetic-split",
+        probe_fit=TaskPartition(pl.DataFrame(features[:n_fit], schema=names), y_fit, row_ids[:n_fit]),
+        probe_score=TaskPartition(pl.DataFrame(features[n_fit:], schema=names), y_score, row_ids[n_fit:]),
+        schema=FeatureSchema(names, ("numeric",) * p),
+        preprocessing_id="synthetic-raw",
+        probe_fit_missing_rates=(0.0,) * p,
+    )
+
+    batch = collate_tasks([task])
+    assert float(batch.target_std[0]) == 1.0
+    assert float(batch.target_mean[0]) == 3.0
+    torch.testing.assert_close(batch.y_train_std[0], torch.zeros(n_fit))
+    torch.testing.assert_close(batch.y_test_std[0], torch.tensor([0.0, 1.0, -1.0, 0.5]))

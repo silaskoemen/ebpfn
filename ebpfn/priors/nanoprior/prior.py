@@ -8,6 +8,10 @@ from sklearn.ensemble import ExtraTreesRegressor
 
 from ebpfn.priors.nanoprior.mechanisms import MechanismEta, Role, select
 
+# ebpfn: smallest target spread, relative to the target's own offset, that float32 can
+# still resolve. Below it the "variation" is rounding error rather than signal.
+_MIN_TARGET_SPREAD = 16 * torch.finfo(torch.float32).eps
+
 # ----- Dataset sampling -----
 
 
@@ -61,6 +65,12 @@ def rand_dataset_filtered(
             y = y.long().squeeze(-1)
             y = F.one_hot(y, num_classes=int(y.max().item() + 1)).float()  # (n, n_classes)
             y = y[:, :1] if y.shape[1] == 2 else y  # drop one dimension for binary to make it faster
+        elif y.std() <= _MIN_TARGET_SPREAD * y.abs().max():
+            # ebpfn: the check below cannot reject a constant regression target. It compares
+            # (y - mean)^2 against (y - oob)^2 in float32, and for a constant y the rounding
+            # error of the mean makes the first term strictly positive while the trees
+            # reproduce y exactly -- so a task carrying no signal at all scores as learnable.
+            continue
 
         Y_np = y.float().cpu().numpy()
 

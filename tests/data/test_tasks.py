@@ -295,7 +295,8 @@ def test_final_test_missingness_does_not_affect_tuning_identity():
     assert changed.task.final_test.X.height == baseline.task.final_test.X.height - 1
 
 
-def test_probe_fit_target_requires_variation():
+def test_constant_probe_fit_target_is_admitted():
+    """A context split that is constant is a real regime, not a malformed task."""
     task = _task()
     config = _config()
     split = create_source_split("source", len(task.y), config.split)
@@ -312,8 +313,8 @@ def test_probe_fit_target_requires_variation():
         task.schema,
     )
     result = build_evaluation_task(changed, split, config)
-    assert result.task is None
-    assert result.eligibility.reasons == ("probe-fit regression target must contain finite variation",)
+    assert result.task is not None
+    assert result.eligibility.reasons == ()
 
 
 @pytest.mark.parametrize(("features", "admitted"), [(100, True), (101, False)])

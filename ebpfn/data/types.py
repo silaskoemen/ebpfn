@@ -35,9 +35,17 @@ def _validate_regression_target(y: np.ndarray, *, allow_missing: bool) -> None:
         raise ValueError("task partition target must be finite")
 
 
-def _validate_target_variation(y: np.ndarray, *, role: str) -> None:
-    if len(y) < 2 or np.all(y == y[0]):
-        raise ValueError(f"{role} regression target must contain finite variation")
+def _validate_target_rows(y: np.ndarray, *, role: str) -> None:
+    """Require enough rows to fit anything; a *constant* target is deliberately allowed.
+
+    A context split that happens to be constant occurs in real data and is a legitimate
+    task -- it says the target is the same everywhere the model can see, which is what
+    the near-deterministic regime looks like. ``collate_tasks`` standardizes such a split
+    in raw units rather than dividing by a degenerate scale. Rejecting it here is a
+    one-line change if a run ever wants the stricter contract back.
+    """
+    if len(y) < 2:
+        raise ValueError(f"{role} regression target needs at least two rows")
 
 
 @dataclass(frozen=True)
@@ -174,7 +182,7 @@ class TuningTask:
         if any(not np.isfinite(rate) or not 0.0 <= rate <= 1.0 for rate in self.probe_fit_missing_rates):
             raise ValueError("probe-fit missingness rates must be finite fractions")
         object.__setattr__(self, "probe_fit_missing_rates", tuple(float(rate) for rate in self.probe_fit_missing_rates))
-        _validate_target_variation(self.probe_fit.y, role="probe-fit")
+        _validate_target_rows(self.probe_fit.y, role="probe-fit")
 
 
 @dataclass(frozen=True)

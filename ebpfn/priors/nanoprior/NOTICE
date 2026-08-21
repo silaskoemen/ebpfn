@@ -44,6 +44,15 @@ probability is exactly 1/8 (1/5 under `only_cheap`), so a tuned run has an exact
 unbounded retry). Corner etas can make most draws fail the ExtraTrees learnability
 check, where an unbounded loop is indistinguishable from a hang.
 
+It further rejects regression targets whose spread is below float32 resolution at their
+own offset. Upstream's learnability check cannot reject a constant target: it compares
+`(y - mean)**2` against `(y - oob)**2` in float32, and for a constant `y` the rounding
+error of the mean makes the first term strictly positive while the trees reproduce `y`
+exactly, so `pval` comes out `0.0` and a task carrying no signal is accepted as
+learnable. Measured at roughly 0.25% of draws, and not eta-specific -- it fires on
+upstream's own uniform mixture too. This is the one modification that changes which
+draws upstream would have returned; the family draws themselves are untouched.
+
 `tasks.py` in this directory is **ebpfn code, not vendored** — it adapts the upstream
 generator to ebpfn's task contracts (exact `CharacterizationShape`, `TuningTask`,
 deterministic seeding through `RandomStreams`).
