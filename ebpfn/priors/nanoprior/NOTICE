@@ -26,8 +26,23 @@ ty) rather than being excluded, so it conforms to the project like any other mod
 - removed the upstream `if __name__ == '__main__'` matplotlib plotting demo, which also
   drops a matplotlib import from a core-dependency module.
 
-Expect further divergence: exposing upstream's hardcoded sampling constants as tunable
-coordinates is the planned next step. Record changes here as they happen.
+Behavioural divergence, opt-in only
+-----------------------------------
+An optional `eta: MechanismEta | None` threads through the eight functions on the path
+to a family draw (`rand_dataset_filtered`, `rand_dataset_plain`, `rand_node_func`,
+`rand_converter`, `rand_multi_func`, `rand_func`, `rand_prod_func`, `rand_points`). It
+replaces upstream's uniform choice over the eight mechanism families with a grouped
+simplex, split by role -- `rand_points` draws under the root-marginal simplex, every
+other site under the mechanism simplex. See `mechanisms.py`.
+
+`eta=None` is the default everywhere and takes upstream's own `randchoice` branch, so
+the unmodified path is bit-identical, not merely equal in distribution; a test in
+`tests/priors/test_mechanisms.py` pins that. At the origin eta the induced per-family
+probability is exactly 1/8 (1/5 under `only_cheap`), so a tuned run has an exact null.
+
+`rand_dataset_filtered` also gained `max_attempts` (default `None` = upstream's
+unbounded retry). Corner etas can make most draws fail the ExtraTrees learnability
+check, where an unbounded loop is indistinguishable from a hang.
 
 `tasks.py` in this directory is **ebpfn code, not vendored** — it adapts the upstream
 generator to ebpfn's task contracts (exact `CharacterizationShape`, `TuningTask`,

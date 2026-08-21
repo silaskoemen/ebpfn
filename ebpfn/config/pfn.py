@@ -15,18 +15,25 @@ from ebpfn.config.prior import HyperPriorConfig, ShapeJitterConfig
 
 
 class PfnArchConfig(StrictConfigModel):
-    """Backbone architecture plus the fixed standardized-target output grid.
+    """Backbone architecture plus the predictive head it emits into.
 
     ``embed_dim`` must divide evenly by the column/row head counts, and the ICL block
     width ``embed_dim * n_cls_cols`` by ``icl_nhead`` (each attention head splits the
-    embedding into equal head dimensions). Two bins are full-support half-normal tails
-    beginning at ``+-target_inner_bound`` with scale ``target_tail_scale``; all other
-    bins uniformly partition the shared interior. ``max_context`` is the declared
-    maximum training context in rows; it is provenance for the feasibility profile,
-    not a runtime cap.
+    embedding into equal head dimensions). ``max_context`` is the declared maximum
+    training context in rows; it is provenance for the feasibility profile, not a
+    runtime cap.
+
+    ``head`` selects what the ``n_outputs`` backbone outputs mean. ``"bar"`` is ebpfn's
+    own bar distribution: two bins are full-support half-normal tails beginning at
+    ``+-target_inner_bound`` with scale ``target_tail_scale`` and the rest uniformly
+    partition the interior. ``"quantile"`` is the released TabICLv2 regression head,
+    ``n_quantiles`` values on upstream's interior level grid; the defaults here match
+    the released checkpoint so a fine-tune from it needs no overrides.
     """
 
+    head: Literal["bar", "quantile"] = "bar"
     n_bins: int = 256
+    n_quantiles: int = 999
     target_inner_bound: float = 5.0
     target_tail_scale: float = 1.0
     embed_dim: int = 128
@@ -41,10 +48,17 @@ class PfnArchConfig(StrictConfigModel):
     n_cls_rows: int = 128
     max_context: int = 1024
 
+    @property
+    def n_outputs(self) -> int:
+        """Width the backbone must emit for the selected head."""
+        return self.n_bins if self.head == "bar" else self.n_quantiles
+
     @model_validator(mode="after")
     def validate_values(self) -> "PfnArchConfig":
         if self.n_bins < 3:
             raise ValueError("n_bins must provide two tail bins and at least one interior bin")
+        if self.n_quantiles < 2:
+            raise ValueError("n_quantiles must be at least two")
         if self.target_inner_bound <= 0.0 or self.target_tail_scale <= 0.0:
             raise ValueError("target inner bound and tail scale must be positive")
         positive = (
@@ -78,6 +92,12 @@ class PfnTrainConfig(StrictConfigModel):
     jittered shape. ``gradient_accumulation_steps`` controls how many microbatches
     form the effective batch. The anchor is the mean of the jittered shape
     distribution; ``jitter`` widens it.
+
+    ``finetune_scope`` restricts which stage receives gradient, splitting the backbone
+    the way the released checkpoint does: ``"icl"`` trains the ICL predictor and head
+    only (frozen column and row stages), ``"head"`` the output head alone. A mixture
+    over mechanisms is a claim about *functions*, which the ICL predictor consumes, so
+    the narrower scopes are the cheap end of the transfer-learning objective.
     """
 
     seed: int = 0
@@ -89,6 +109,7 @@ class PfnTrainConfig(StrictConfigModel):
     warmup_steps: int = 100
     grad_clip: float = 1.0
     device: Literal["auto", "cpu", "cuda", "mps"] = "auto"
+    finetune_scope: Literal["all", "icl", "head"] = "all"
     checkpoint_interval: int = 200
     anchor_probe_fit: int = 512
     anchor_probe_score: int = 128

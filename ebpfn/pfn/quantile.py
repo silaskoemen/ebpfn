@@ -185,6 +185,14 @@ class QuantileDistribution(nn.Module):
         out = torch.where(alphas < levels[0], left, interior)
         return torch.where(alphas > levels[-1], right, out)
 
+    def training_loss(self, values: Tensor, y: Tensor) -> Tensor:
+        """The loss this head is fit by — pinball, not NLL.
+
+        NLL here goes through a reconstructed density (sorted knots, linear interior,
+        fitted exponential tails) and is far more fragile than the quantiles themselves.
+        """
+        return self.pinball(values, y)
+
     def pinball(self, values: Tensor, y: Tensor) -> Tensor:
         """Mean pinball loss over the level grid — the head's native training loss."""
         sorted_q = self._flat(values)

@@ -26,6 +26,7 @@ import torch
 
 from ebpfn.data import CharacterizationShape, FeatureSchema, TaskPartition, TuningTask, content_hash
 from ebpfn.priors.contracts import GeneratedTask
+from ebpfn.priors.nanoprior.mechanisms import MechanismEta
 from ebpfn.priors.nanoprior.prior import rand_dataset_filtered
 from ebpfn.utils import RandomRole, RandomStreams
 
@@ -46,12 +47,19 @@ def seeded_globals(seed: int) -> Iterator[None]:
         torch.random.set_rng_state(torch_state)
 
 
-def sample_task(shape: CharacterizationShape, streams: RandomStreams, *identity: str | int) -> GeneratedTask:
+def sample_task(
+    shape: CharacterizationShape,
+    streams: RandomStreams,
+    *identity: str | int,
+    eta: MechanismEta | None = None,
+    max_attempts: int | None = None,
+) -> GeneratedTask:
     """Draw one regression task from the vendored TabICLv2 prior at an exact shape.
 
     Upstream rejection-samples until an ExtraTrees out-of-bag test finds signal
     (p < 0.05), so the returned task is never pure noise — the learnability filter
-    ebpfn's own generator lacks.
+    ebpfn's own generator lacks. ``eta`` reweights the mechanism mixture; ``None``
+    leaves upstream's uniform draw untouched.
     """
     if shape.p_categorical != 0:
         raise ValueError("nanoprior tasks are numeric-only until the task contracts carry categoricals")
@@ -65,7 +73,9 @@ def sample_task(shape: CharacterizationShape, streams: RandomStreams, *identity:
 
     with seeded_globals(seed):
         # y_cat_sizes=[0] selects the numeric (regression) target branch upstream.
-        columns = rand_dataset_filtered(x_cat_sizes=[0] * p, y_cat_sizes=[0], n_samples=n)
+        columns = rand_dataset_filtered(
+            x_cat_sizes=[0] * p, y_cat_sizes=[0], n_samples=n, eta=eta, max_attempts=max_attempts
+        )
 
     features = torch.cat([tensor for name, tensor in columns.items() if name.startswith("x")], dim=-1)
     x_obs = features.numpy().astype(float)
@@ -79,7 +89,9 @@ def sample_task(shape: CharacterizationShape, streams: RandomStreams, *identity:
     schema = FeatureSchema(names, ("numeric",) * p)
     n_fit = shape.n_probe_fit
     row_ids = np.arange(n)
-    task_key = content_hash(seed, n, p, identity, namespace="nanoprior-task-1")
+    # eta enters the identity so tasks from different mixtures never collide in a cache.
+    eta_key = None if eta is None else eta.to_dict()
+    task_key = content_hash(seed, n, p, identity, eta_key, namespace="nanoprior-task-1")
     tuning = TuningTask(
         task_id=f"nanoprior-{task_key[:16]}",
         source_id="synthetic",
@@ -95,6 +107,7 @@ def sample_task(shape: CharacterizationShape, streams: RandomStreams, *identity:
     diagnostics: dict[str, Any] = {
         "route": "nanoprior",
         "seed": seed,
+        "eta": eta_key,
         "shape": {"n": n, "p": p, "n_probe_fit": n_fit, "n_probe_score": shape.n_probe_score},
     }
     return GeneratedTask(tuning=tuning, diagnostics=diagnostics)

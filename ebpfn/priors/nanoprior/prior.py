@@ -6,10 +6,14 @@ import torch.nn.functional as F
 from numpy.random import randint
 from sklearn.ensemble import ExtraTreesRegressor
 
+from ebpfn.priors.nanoprior.mechanisms import MechanismEta, Role, select
+
 # ----- Dataset sampling -----
 
 
-def rand_dataset_plain(x_cat_sizes: list[int], y_cat_sizes: list[int], n_samples: int) -> dict[str, torch.Tensor]:
+def rand_dataset_plain(
+    x_cat_sizes: list[int], y_cat_sizes: list[int], n_samples: int, eta: MechanismEta | None = None
+) -> dict[str, torch.Tensor]:
     # categorical sizes: 0 for numericals, >0 for categoricals with this cardinality.
     # ----- Create computation graph -----
     n_nodes = randlogint(2, 32 + 1)
@@ -28,16 +32,26 @@ def rand_dataset_plain(x_cat_sizes: list[int], y_cat_sizes: list[int], n_samples
     columns = {}
     for node_idx in range(n_nodes):
         parent_values = [node_values[parent] for parent in graph[node_idx]]
-        node_values[node_idx], out_features = rand_node_func(node_cat_sizes[node_idx], parent_values, n_samples)
+        node_values[node_idx], out_features = rand_node_func(node_cat_sizes[node_idx], parent_values, n_samples, eta)
         columns.update(out_features)
     for col in columns.values():
         col[~torch.isfinite(col)] = 0  # fill nan/inf with zero
     return columns
 
 
-def rand_dataset_filtered(x_cat_sizes: list[int], y_cat_sizes: list[int], n_samples: int) -> dict[str, torch.Tensor]:
-    while True:
-        tensors = rand_dataset_plain(x_cat_sizes, y_cat_sizes, n_samples)
+def rand_dataset_filtered(
+    x_cat_sizes: list[int],
+    y_cat_sizes: list[int],
+    n_samples: int,
+    eta: MechanismEta | None = None,
+    max_attempts: int | None = None,
+) -> dict[str, torch.Tensor]:
+    # ebpfn: max_attempts bounds upstream's unbounded retry. Corner etas can make most
+    # draws unlearnable, and an unbounded loop there is indistinguishable from a hang.
+    attempts = 0
+    while max_attempts is None or attempts < max_attempts:
+        attempts += 1
+        tensors = rand_dataset_plain(x_cat_sizes, y_cat_sizes, n_samples, eta)
 
         # ----- ExtraTrees filtering check -----
         X_np = torch.cat([t.float() for name, t in tensors.items() if name.startswith("x")], dim=-1).numpy()
@@ -64,6 +78,7 @@ def rand_dataset_filtered(x_cat_sizes: list[int], y_cat_sizes: list[int], n_samp
 
         if pval < 0.05:
             return tensors
+    raise RuntimeError(f"no learnable dataset in {max_attempts} attempts; this eta may be mostly unlearnable")
 
 
 def rand_cat_sizes(n_features: int, max_cat_size: int = 100) -> list[int]:
@@ -106,9 +121,9 @@ def rand_cauchy_graph(n_nodes: int) -> list[list[int]]:  # returns list of paren
 # ----- Random node function -----
 
 
-def rand_node_func(cat_sizes: dict[str, int], xs: list[torch.Tensor], n_samples: int):
+def rand_node_func(cat_sizes: dict[str, int], xs: list[torch.Tensor], n_samples: int, eta: MechanismEta | None = None):
     n_features = sum(max(csz, 1) for csz in cat_sizes.values()) + randlogint(1, 32)
-    x = rand_points(n_samples, n_features) if len(xs) == 0 else rand_multi_func(xs, n_features)
+    x = rand_points(n_samples, n_features, eta) if len(xs) == 0 else rand_multi_func(xs, n_features, eta)
     weights = rand_weights(1, x.shape[1])
     x = l2_normalize(standardize(x) * (weights / weights.square().mean().sqrt()))
 
@@ -116,7 +131,7 @@ def rand_node_func(cat_sizes: dict[str, int], xs: list[torch.Tensor], n_samples:
     start_idx = 0
     for name, cat_size in cat_sizes.items():
         end_idx = start_idx + max(cat_size, 1)
-        x[:, start_idx:end_idx], out_features[name] = rand_converter(x[:, start_idx:end_idx], cat_size)
+        x[:, start_idx:end_idx], out_features[name] = rand_converter(x[:, start_idx:end_idx], cat_size, eta)
         start_idx = end_idx
 
     return x * randlognum(0.1, 10.0), out_features
@@ -125,7 +140,9 @@ def rand_node_func(cat_sizes: dict[str, int], xs: list[torch.Tensor], n_samples:
 # ----- Random converter -----
 
 
-def rand_converter(x: torch.Tensor, cat_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+def rand_converter(
+    x: torch.Tensor, cat_size: int, eta: MechanismEta | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     if cat_size <= 0:  # numerical case is easy
         return x, (x if randbool() else rand_kumaraswamy_act(x))
 
@@ -137,7 +154,7 @@ def rand_converter(x: torch.Tensor, cat_size: int) -> tuple[torch.Tensor, torch.
         x = randlognum(0.1, 10) * standardize(x) + torch.log(rand_weights(1, x.shape[1]) + 1e-4)
         x[~torch.isfinite(x)] = 0.0  # this is a dirty fix to avoid errors in torch.multinomial
         x_idxs = torch.multinomial(torch.softmax(x, dim=-1), num_samples=1, replacement=True)
-        x_disc = rand_points(cat_size, cat_size)[x_idxs.squeeze(-1)]
+        x_disc = rand_points(cat_size, cat_size, eta)[x_idxs.squeeze(-1)]
     else:  # neighbor-based
         centers = x[torch.randperm(len(x))[:cat_size]]
         x_idxs = torch.cdist(x, centers, p=randlognum(0.5, 4.0)).argmin(dim=-1)[:, None]  # nearest center idx
@@ -146,7 +163,7 @@ def rand_converter(x: torch.Tensor, cat_size: int) -> tuple[torch.Tensor, torch.
     if mode.endswith("_disc"):  # transform x for further use in the graph
         x = x_disc
     elif mode.endswith("_func"):  # don't have this for softmax because x_disc is already random for softmax
-        x = rand_func(x_disc, cat_size, only_cheap=True)
+        x = rand_func(x_disc, cat_size, only_cheap=True, eta=eta)
     elif mode.endswith("_int"):
         x = x_idxs.float()  # x_idxs.float() is 1 column, it's going to be broadcasted
 
@@ -156,10 +173,10 @@ def rand_converter(x: torch.Tensor, cat_size: int) -> tuple[torch.Tensor, torch.
 # ----- Random multi-function -----
 
 
-def rand_multi_func(xs: list[torch.Tensor], d_out: int):
+def rand_multi_func(xs: list[torch.Tensor], d_out: int, eta: MechanismEta | None = None):
     if randbool():
-        return rand_func(torch.cat(xs, dim=-1), d_out)  # concatenate before random function
-    out_cat = torch.stack([rand_func(x, d_out) for x in xs], dim=0)
+        return rand_func(torch.cat(xs, dim=-1), d_out, eta=eta)  # concatenate before random function
+    out_cat = torch.stack([rand_func(x, d_out, eta=eta) for x in xs], dim=0)
     agg = randchoice([torch.sum, torch.prod, torch.max, torch.logsumexp])(out_cat, dim=0)
     return agg.values if isinstance(agg, tuple) else agg  # torch.max returns a namedtuple
 
@@ -167,10 +184,18 @@ def rand_multi_func(xs: list[torch.Tensor], d_out: int):
 # ----- Random function -----
 
 
-def rand_func(x: torch.Tensor, d_out: int, only_cheap: bool = False) -> torch.Tensor:
+def rand_func(
+    x: torch.Tensor,
+    d_out: int,
+    only_cheap: bool = False,
+    eta: MechanismEta | None = None,
+    role: Role = "mechanism",
+) -> torch.Tensor:
     cheap_funcs = [rand_lin_func, rand_quad_func, rand_gp_func, rand_tree_func, rand_discretization_func]
-    func = randchoice(cheap_funcs if only_cheap else [*cheap_funcs, rand_mlp_func, rand_em_func, rand_prod_func])
-    return func(x, d_out)
+    candidates = cheap_funcs if only_cheap else [*cheap_funcs, rand_mlp_func, rand_em_func, rand_prod_func]
+    # ebpfn: without an eta this is upstream's uniform draw, bit-for-bit.
+    func = randchoice(candidates) if eta is None else select(candidates, eta, role)
+    return rand_prod_func(x, d_out, eta) if func is rand_prod_func else func(x, d_out)
 
 
 def rand_lin_func(x: torch.Tensor, d_out: int) -> torch.Tensor:
@@ -245,8 +270,9 @@ def rand_em_func(x: torch.Tensor, d_out: int) -> torch.Tensor:
     return rand_lin_func(torch.softmax(logits, dim=-1), d_out)  # transform to d_out with linear function
 
 
-def rand_prod_func(x: torch.Tensor, d_out: int) -> torch.Tensor:
-    return rand_func(x, d_out, only_cheap=True) * rand_func(x, d_out, only_cheap=True)  # only_cheap -> no recursion
+def rand_prod_func(x: torch.Tensor, d_out: int, eta: MechanismEta | None = None) -> torch.Tensor:
+    # only_cheap -> no recursion
+    return rand_func(x, d_out, only_cheap=True, eta=eta) * rand_func(x, d_out, only_cheap=True, eta=eta)
 
 
 # ----- Random activation -----
@@ -361,8 +387,10 @@ def rand_activation_matrix(n_batch: int, n: int, m: int) -> torch.Tensor:
 # ----- Random points -----
 
 
-def rand_points(n_batch: int, n: int) -> torch.Tensor:
-    return rand_func(randchoice([rand_cov_points, torch.randn, rand_unif_points, rand_circle_points])(n_batch, n), n)
+def rand_points(n_batch: int, n: int, eta: MechanismEta | None = None) -> torch.Tensor:
+    # ebpfn: the root-marginal role -- shaping latent points, not mapping parents to a child.
+    points = randchoice([rand_cov_points, torch.randn, rand_unif_points, rand_circle_points])(n_batch, n)
+    return rand_func(points, n, eta=eta, role="root")
 
 
 def rand_cov_points(n_batch: int, n: int) -> torch.Tensor:

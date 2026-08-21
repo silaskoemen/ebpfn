@@ -153,23 +153,41 @@ def convert_state_dict(released: dict[str, Tensor]) -> tuple[dict[str, Tensor], 
     return out, rope_freqs
 
 
-def load_tabicl_v2(
+def read_checkpoint(
     spec: CheckpointSpec = TABICL_V2_REGRESSOR,
     *,
     path: Path | None = None,
     allow_download: bool = True,
-) -> NanoTabICLv2:
-    """Build the vendored backbone and load released TabICLv2 weights into it.
+) -> dict:
+    """Load the raw released checkpoint (``config`` plus ``state_dict``) into memory.
+
+    Split out from :func:`load_tabicl_v2` so a caller that needs both the architecture
+    config and the weights reads the (large) file once.
+    """
+    return torch.load(
+        path if path is not None else fetch_checkpoint(spec, allow_download=allow_download),
+        map_location="cpu",
+        weights_only=True,
+    )
+
+
+def released_config(
+    spec: CheckpointSpec = TABICL_V2_REGRESSOR,
+    *,
+    path: Path | None = None,
+    allow_download: bool = True,
+) -> dict:
+    """The architecture config a released checkpoint was trained with."""
+    return read_checkpoint(spec, path=path, allow_download=allow_download)["config"]
+
+
+def build_from_checkpoint(checkpoint: dict, spec: CheckpointSpec = TABICL_V2_REGRESSOR) -> NanoTabICLv2:
+    """Build the vendored backbone and load an already-read released checkpoint into it.
 
     The load is strict: every released tensor must map onto a parameter of matching
     shape, the only tolerated gaps are the bias-free LayerNorm biases, and the RoPE
     frequencies must agree with the ones the vendored module derives.
     """
-    checkpoint = torch.load(
-        path if path is not None else fetch_checkpoint(spec, allow_download=allow_download),
-        map_location="cpu",
-        weights_only=True,
-    )
     config = checkpoint["config"]
     if config["num_quantiles"] != spec.num_quantiles:
         raise ValueError(f"checkpoint emits {config['num_quantiles']} quantiles, spec pins {spec.num_quantiles}")
@@ -208,3 +226,13 @@ def load_tabicl_v2(
 
     model.load_state_dict(mapped, strict=True)
     return model
+
+
+def load_tabicl_v2(
+    spec: CheckpointSpec = TABICL_V2_REGRESSOR,
+    *,
+    path: Path | None = None,
+    allow_download: bool = True,
+) -> NanoTabICLv2:
+    """Read a released checkpoint and load its weights into the vendored backbone."""
+    return build_from_checkpoint(read_checkpoint(spec, path=path, allow_download=allow_download), spec)

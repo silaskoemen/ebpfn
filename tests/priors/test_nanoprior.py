@@ -9,7 +9,7 @@ import pytest
 import torch
 from ebpfn.data import CharacterizationShape
 from ebpfn.pfn.data import NanopriorTaskSource, collate_tasks
-from ebpfn.priors.nanoprior import sample_task
+from ebpfn.priors.nanoprior import MechanismEta, sample_task
 from ebpfn.utils import RandomStreams
 
 
@@ -72,3 +72,36 @@ def test_source_batches_collate_for_the_backbone() -> None:
     assert torch.isfinite(batch.x).all()
     assert torch.isfinite(batch.y_train_std).all()
     torch.testing.assert_close(batch.y_train_std.mean(dim=-1), torch.zeros(3), atol=1e-5, rtol=0)
+
+
+def test_eta_changes_the_task_and_its_identity() -> None:
+    """A tuned mixture must be a different prior, and must not collide in a cache."""
+    baseline = sample_task(_shape(), RandomStreams(0), "t").tuning
+    smooth = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0))
+    tuned = sample_task(_shape(), RandomStreams(0), "t", eta=smooth).tuning
+
+    assert tuned.task_id != baseline.task_id
+    assert not np.array_equal(tuned.probe_fit.y, baseline.probe_fit.y)
+    assert sample_task(_shape(), RandomStreams(0), "t", eta=smooth).tuning.task_id == tuned.task_id
+
+
+def test_eta_is_recorded_on_the_generated_task() -> None:
+    generated = sample_task(_shape(), RandomStreams(0), "t", eta=MechanismEta())
+    assert generated.diagnostics["eta"] == MechanismEta().to_dict()
+    assert sample_task(_shape(), RandomStreams(0), "t").diagnostics["eta"] is None
+
+
+def test_exhausted_learnability_retries_raise_rather_than_hang() -> None:
+    """Corner etas can make most draws unlearnable; an unbounded loop looks like a hang."""
+    with pytest.raises(RuntimeError, match="mostly unlearnable"):
+        sample_task(_shape(), RandomStreams(0), "t", max_attempts=0)
+
+
+def test_task_source_carries_its_eta() -> None:
+    shape = _shape()
+    streams = RandomStreams(0)
+    baseline = NanopriorTaskSource(streams).sample_batch(2, shape, "batch")
+    tuned = NanopriorTaskSource(streams, eta=MechanismEta(root=(1.0, 0.0, 0.0, 0.0))).sample_batch(2, shape, "batch")
+
+    assert [task.task_id for task in baseline] != [task.task_id for task in tuned]
+    assert collate_tasks(tuned).x.shape == collate_tasks(baseline).x.shape

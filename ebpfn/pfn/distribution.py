@@ -132,6 +132,10 @@ class BarDistribution(nn.Module):
         """Negative log-density; this is the training loss (a proper scoring rule)."""
         return -self.log_prob(logits, y)
 
+    def training_loss(self, logits: Tensor, y: Tensor) -> Tensor:
+        """The loss this head is fit by. NLL is proper and analytic here, so it is both."""
+        return self.nll(logits, y)
+
     def cdf(self, logits: Tensor, y: Tensor) -> Tensor:
         """``P(Y <= y)`` — monotone in ``y`` by construction (no quantile crossing)."""
         probs = F.softmax(logits, dim=-1)

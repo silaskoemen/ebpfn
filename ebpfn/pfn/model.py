@@ -1,58 +1,44 @@
-"""``EBPFNModel``: the vendored TabICLv2 backbone plus a bar-distribution head.
+"""``EBPFNModel``: the vendored TabICLv2 backbone plus a pluggable predictive head.
 
-The backbone (``max_classes=0``) emits ``n_bins`` logits per test row; the
-:class:`BarDistribution` interprets them as a full-support predictive density. The
-model is config-agnostic (borders + explicit architecture kwargs) so it stays pure
-torch; config bridging lives in ``train.py``.
+Both parts are injected rather than constructed here, because the two bases we train
+from differ in both: a fresh backbone with a :class:`BarDistribution` over ``n_bins``,
+or released TabICLv2 weights with a :class:`QuantileDistribution` over 999 levels. The
+model is config-agnostic; config bridging lives in ``train.py``.
 """
 
 import torch
 from torch import Tensor, nn
 
 from ebpfn.pfn.data import TaskBatch
-from ebpfn.pfn.distribution import BarDistribution
+from ebpfn.pfn.metrics import PredictiveDistribution
 from ebpfn.pfn.nanotabicl import NanoTabICLv2
 
 
+def backbone_out_dim(backbone: NanoTabICLv2) -> int:
+    """Head width the backbone emits, read off its output MLP."""
+    final = backbone.out_mlp[-1]
+    if not isinstance(final, nn.Linear):
+        raise TypeError("backbone output MLP does not end in a Linear layer")
+    return final.out_features
+
+
 class EBPFNModel(nn.Module):
-    def __init__(
-        self,
-        borders: Tensor,
-        *,
-        embed_dim: int = 128,
-        col_num_blocks: int = 3,
-        row_num_blocks: int = 3,
-        icl_num_blocks: int = 12,
-        col_nhead: int = 8,
-        row_nhead: int = 8,
-        icl_nhead: int = 8,
-        feature_group_size: int = 3,
-        n_cls_cols: int = 4,
-        n_cls_rows: int = 128,
-    ) -> None:
+    def __init__(self, backbone: NanoTabICLv2, distribution: PredictiveDistribution) -> None:
         super().__init__()
-        self.distribution = BarDistribution(borders)
-        self.backbone = NanoTabICLv2(
-            max_classes=0,
-            out_dim=self.distribution.n_bins,
-            embed_dim=embed_dim,
-            col_num_blocks=col_num_blocks,
-            row_num_blocks=row_num_blocks,
-            icl_num_blocks=icl_num_blocks,
-            col_nhead=col_nhead,
-            row_nhead=row_nhead,
-            icl_nhead=icl_nhead,
-            feature_group_size=feature_group_size,
-            n_cls_cols=n_cls_cols,
-            n_cls_rows=n_cls_rows,
-        )
+        if not isinstance(distribution, nn.Module):
+            raise TypeError("distribution must be an nn.Module so its buffers follow the model across devices")
+        width = backbone_out_dim(backbone)
+        if width != distribution.n_outputs:
+            raise ValueError(f"backbone emits {width} outputs but the head expects {distribution.n_outputs}")
+        self.backbone = backbone
+        self.distribution = distribution
 
     @property
-    def n_bins(self) -> int:
-        return self.distribution.n_bins
+    def n_outputs(self) -> int:
+        return self.distribution.n_outputs
 
     def forward(self, x: Tensor, y_train: Tensor, return_embedding: bool = False) -> Tensor:
-        """Bin logits for the test rows: ``(B, n_test, n_bins)``.
+        """Head outputs for the test rows: ``(B, n_test, n_outputs)``.
 
         ``x`` is ``(B, n_rows, n_cols)`` with the ``n_train`` context rows first;
         ``y_train`` is ``(B, n_train)`` standardized targets for those rows.
@@ -64,9 +50,9 @@ class EBPFNModel(nn.Module):
         return self.backbone(x, y_train, return_embedding=return_embedding)
 
     def loss(self, batch: TaskBatch) -> Tensor:
-        """Mean bar-distribution NLL of the query targets — the training objective."""
-        logits = self(batch.x, batch.y_train_std)
-        return self.distribution.nll(logits, batch.y_test_std).mean()
+        """Mean of the head's native training loss on the query targets."""
+        outputs = self(batch.x, batch.y_train_std)
+        return self.distribution.training_loss(outputs, batch.y_test_std).mean()
 
     @torch.no_grad()
     def predict_logits(self, x: Tensor, y_train: Tensor) -> Tensor:

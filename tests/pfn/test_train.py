@@ -7,17 +7,23 @@ import torch
 from ebpfn.config.pfn import PfnArchConfig, PfnTrainConfig
 from ebpfn.config.prior import HyperPriorConfig
 from ebpfn.data.types import CharacterizationShape
-from ebpfn.pfn.data import PairedPriorTaskSource, PriorTaskSource
+from ebpfn.pfn.checkpoints import TABICL_V2_REGRESSOR, cache_dir
+from ebpfn.pfn.data import NanopriorTaskSource, PairedPriorTaskSource, PriorTaskSource
+from ebpfn.pfn.quantile import QuantileDistribution
 from ebpfn.pfn.train import (
     MPS_MEMORY_FRACTION,
+    build_model,
     build_source,
     configure_device_memory,
+    export_released_base,
     load_checkpoint,
     release_device_cache,
     select_device,
     train_pfn,
+    trainable_parameters,
 )
 from ebpfn.priors import build_hyperprior
+from ebpfn.priors.nanoprior import MechanismEta
 from ebpfn.utils import RandomStreams
 
 
@@ -208,3 +214,90 @@ def test_checkpoint_records_exact_tuned_source_and_training_config(tmp_path: Pat
     assert checkpoint["source_eta"] == dataclasses.asdict(eta)
     assert checkpoint["source_seed"] == train.seed
     assert checkpoint["source_stream"] == source.stream_provenance
+
+
+def _small_arch(**overrides) -> PfnArchConfig:
+    return PfnArchConfig(
+        embed_dim=16,
+        col_num_blocks=1,
+        row_num_blocks=1,
+        icl_num_blocks=1,
+        col_nhead=2,
+        row_nhead=2,
+        icl_nhead=2,
+        n_cls_rows=8,
+        **overrides,
+    )
+
+
+@pytest.mark.parametrize(
+    ("scope", "learns_col", "learns_icl"),
+    [("all", True, True), ("icl", False, True), ("head", False, False)],
+)
+def test_finetune_scope_freezes_the_stages_outside_it(scope: str, learns_col: bool, learns_icl: bool) -> None:
+    """The cost dial for the transfer objective: which backbone stage receives gradient."""
+    model = build_model(_small_arch(n_bins=32))
+    trainable_parameters(model, scope)
+
+    assert model.backbone.x_embed.weight.requires_grad is learns_col
+    assert model.backbone.col_blocks[0].tfm1.mlp[0].weight.requires_grad is learns_col
+    assert model.backbone.icl_blocks[0].mlp[0].weight.requires_grad is learns_icl
+    assert model.backbone.out_mlp[0].weight.requires_grad is True  # head always learns
+
+
+def test_frozen_stages_are_withheld_from_the_optimizer() -> None:
+    """Not just requires_grad: frozen tensors must accrue no weight decay or Adam state."""
+    model = build_model(_small_arch(n_bins=32))
+    learning = trainable_parameters(model, "head")
+    total = sum(parameter.numel() for parameter in model.parameters())
+
+    assert 0 < sum(parameter.numel() for parameter in learning) < total
+    assert all(parameter.requires_grad for parameter in learning)
+
+
+def test_unknown_finetune_scope_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown finetune scope"):
+        trainable_parameters(build_model(_small_arch(n_bins=32)), "backbone")
+
+
+def test_quantile_head_round_trips_through_a_checkpoint(tmp_path: Path) -> None:
+    """A quantile checkpoint stores no borders; reload must rebuild the head from arch."""
+    arch = _small_arch(head="quantile", n_quantiles=16)
+    train = PfnTrainConfig(
+        steps=1,
+        tasks_per_step=1,
+        gradient_accumulation_steps=1,
+        warmup_steps=0,
+        device="cpu",
+        checkpoint_interval=1,
+        anchor_probe_fit=32,
+        anchor_probe_score=8,
+        anchor_features=4,
+    )
+    source = NanopriorTaskSource(RandomStreams(train.seed), eta=MechanismEta(), max_attempts=50)
+    _, result = train_pfn(arch, train, source=source, checkpoint_dir=tmp_path)
+
+    reloaded, checkpoint = load_checkpoint(result.checkpoint_path)
+    assert checkpoint["borders"] is None
+    assert isinstance(reloaded.distribution, QuantileDistribution)
+    assert reloaded.n_outputs == 16
+    assert checkpoint["source_eta"] == MechanismEta().to_dict()
+
+
+@pytest.mark.skipif(
+    not (cache_dir() / TABICL_V2_REGRESSOR.filename).exists(),
+    reason="released checkpoint not cached locally",
+)
+def test_released_base_exports_as_an_ordinary_checkpoint(tmp_path: Path) -> None:
+    """Released weights must enter training by the same door as any of our own runs."""
+    path, arch = export_released_base(tmp_path, allow_download=False)
+    model, checkpoint = load_checkpoint(path)
+
+    assert arch.head == "quantile"
+    assert arch.n_outputs == 999
+    assert checkpoint["step"] == 0
+    assert checkpoint["losses"] == []
+    assert checkpoint["source_eta"] is None  # upstream's uniform mixture has no coordinates
+    assert checkpoint["optimizer"] is None
+    assert model.n_outputs == 999
+    assert PfnArchConfig.model_validate(checkpoint["arch"]) == arch

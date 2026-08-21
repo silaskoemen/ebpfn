@@ -16,13 +16,15 @@ be mapped back to the original target scale.
 import dataclasses
 import json
 from pathlib import Path
+from typing import Any, Protocol
 
 import numpy as np
 import torch
 from torch import Tensor
 
 from ebpfn.data.types import CharacterizationShape, TaskPartition, TuningTask
-from ebpfn.priors import HyperPrior, hyperprior_from_dict, sample_task
+from ebpfn.priors import HyperPrior, hyperprior_from_dict, hyperprior_to_dict, sample_task
+from ebpfn.priors.nanoprior import MechanismEta
 from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
 
@@ -105,6 +107,27 @@ def collate_tasks(tasks: list[TuningTask]) -> TaskBatch:
     )
 
 
+class TaskSource(Protocol):
+    """What the training loop needs from wherever tasks come from.
+
+    ``eta_payload`` is the JSON-able identity of the generating prior — an ebpfn
+    ``HyperPrior``, a nanoprior ``MechanismEta``, or ``None`` for a prior with no
+    tunable coordinates. Checkpoints record it and resume compares it.
+    """
+
+    streams: RandomStreams
+
+    @property
+    def stream_provenance(self) -> dict[str, str | int | bool | None]: ...
+
+    @property
+    def eta_payload(self) -> dict[str, Any] | None: ...
+
+    def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]: ...
+
+    def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch: ...
+
+
 class PriorTaskSource:
     """Yields tasks sampled from a fixed ``eta`` — the seam the PFN trains against.
 
@@ -127,6 +150,10 @@ class PriorTaskSource:
             "pairing_id": None,
         }
 
+    @property
+    def eta_payload(self) -> dict[str, Any] | None:
+        return hyperprior_to_dict(self.eta)
+
     @classmethod
     def from_eta_file(cls, path: Path, streams: RandomStreams) -> "PriorTaskSource":
         """Load an exact tuned eta artifact as a PFN training source."""
@@ -143,29 +170,46 @@ class PriorTaskSource:
 
 
 class NanopriorTaskSource:
-    """Task source drawing from the vendored TabICLv2 prior instead of an ``eta``.
+    """Task source drawing from the vendored TabICLv2 prior under a mechanism ``eta``.
 
-    The comparison arm for "is their generator better than ours at equal training
-    budget" — same interface as :class:`PriorTaskSource`, so the training loop and the
-    bank are indifferent to which one they are handed. It has no ``eta`` because the
-    upstream generator exposes no hyperparameters; that is the point of the arm, and the
-    reason it can be measured but not yet tuned.
+    Same interface as :class:`PriorTaskSource`, so the training loop and the bank are
+    indifferent to which one they are handed. ``eta=None`` is upstream's own uniform
+    mixture — the exact null for any tuned variant, and the mixture the released
+    TabICLv2 checkpoint was trained on. ``max_attempts`` bounds the learnability
+    rejection loop, which corner etas can drive long.
     """
 
-    def __init__(self, streams: RandomStreams) -> None:
+    def __init__(
+        self,
+        streams: RandomStreams,
+        *,
+        eta: MechanismEta | None = None,
+        max_attempts: int | None = None,
+    ) -> None:
         self.streams = streams
+        self.eta = eta
+        self.max_attempts = max_attempts
 
     @property
     def stream_provenance(self) -> dict[str, str | int | bool | None]:
         return {
-            "version": "nanoprior-task-source-1",
+            "version": "nanoprior-task-source-2",
             "base_seed": self.streams.base_seed,
             "common_random_numbers": False,
             "pairing_id": None,
         }
 
+    @property
+    def eta_payload(self) -> dict[str, Any] | None:
+        return None if self.eta is None else self.eta.to_dict()
+
     def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
-        return [nanoprior_sample_task(shape, self.streams, *identity, member).tuning for member in range(batch_size)]
+        return [
+            nanoprior_sample_task(
+                shape, self.streams, *identity, member, eta=self.eta, max_attempts=self.max_attempts
+            ).tuning
+            for member in range(batch_size)
+        ]
 
     def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
         return collate_tasks(self.sample_batch(batch_size, shape, *identity))

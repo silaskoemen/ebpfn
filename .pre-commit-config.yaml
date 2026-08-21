@@ -29,7 +29,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        exclude: ^(scripts|tests)/
+        exclude: ^tests/
       - id: check-merge-conflict
         name: check-merge-conflict
         entry: '^(<<<<<<< |======= |>>>>>>> |=======$)'

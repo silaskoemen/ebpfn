@@ -16,8 +16,7 @@ import torch
 
 from ebpfn.config.pfn import PfnArchConfig, PfnStudyModeConfig, PfnTrainConfig
 from ebpfn.data.types import CharacterizationShape
-from ebpfn.pfn.data import PriorTaskSource, TaskBatch
-from ebpfn.pfn.distribution import fixed_borders
+from ebpfn.pfn.data import TaskBatch, TaskSource
 from ebpfn.pfn.model import EBPFNModel
 from ebpfn.pfn.train import (
     anchor_shape,
@@ -134,7 +133,7 @@ def profile(
     train: PfnTrainConfig,
     mode: PfnStudyModeConfig,
     *,
-    source: PriorTaskSource | None = None,
+    source: TaskSource | None = None,
     reps: int = 3,
 ) -> dict[str, Any]:
     """Profile ``arch`` over the ``mode`` feasibility grid and return a report dict."""
@@ -144,13 +143,8 @@ def profile(
     if source is None:
         source = build_source(train, streams)
     anchor = anchor_shape(train)
-    borders = fixed_borders(
-        arch.n_bins,
-        inner_bound=arch.target_inner_bound,
-        tail_scale=arch.target_tail_scale,
-    )
     torch.manual_seed(train.seed)
-    reference_model = build_model(arch, borders)
+    reference_model = build_model(arch)
     n_parameters = int(sum(parameter.numel() for parameter in reference_model.parameters()))
     del reference_model
 
@@ -166,7 +160,7 @@ def profile(
             try:
                 batch = source.tensor_batch(mode.profile_tasks, shape, "profile", rows, features).to(device)
                 torch.manual_seed(train.seed)
-                model = build_model(arch, borders).to(device)
+                model = build_model(arch).to(device)
                 cell = profile_cell(
                     model,
                     batch,
