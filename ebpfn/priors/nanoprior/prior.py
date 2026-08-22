@@ -205,7 +205,7 @@ def rand_func(
     candidates = cheap_funcs if only_cheap else [*cheap_funcs, rand_mlp_func, rand_em_func, rand_prod_func]
     # ebpfn: without an eta this is upstream's uniform draw, bit-for-bit.
     func = randchoice(candidates) if eta is None else select(candidates, eta, role)
-    return rand_prod_func(x, d_out, eta) if func is rand_prod_func else func(x, d_out)
+    return rand_prod_func(x, d_out, eta, role) if func is rand_prod_func else func(x, d_out)
 
 
 def rand_lin_func(x: torch.Tensor, d_out: int) -> torch.Tensor:
@@ -280,9 +280,14 @@ def rand_em_func(x: torch.Tensor, d_out: int) -> torch.Tensor:
     return rand_lin_func(torch.softmax(logits, dim=-1), d_out)  # transform to d_out with linear function
 
 
-def rand_prod_func(x: torch.Tensor, d_out: int, eta: MechanismEta | None = None) -> torch.Tensor:
-    # only_cheap -> no recursion
-    return rand_func(x, d_out, only_cheap=True, eta=eta) * rand_func(x, d_out, only_cheap=True, eta=eta)
+def rand_prod_func(
+    x: torch.Tensor, d_out: int, eta: MechanismEta | None = None, role: Role = "mechanism"
+) -> torch.Tensor:
+    # only_cheap -> no recursion. ebpfn: the operands keep the caller's role, or a
+    # multiplicative root draw would silently pull them from the mechanism simplex.
+    return rand_func(x, d_out, only_cheap=True, eta=eta, role=role) * rand_func(
+        x, d_out, only_cheap=True, eta=eta, role=role
+    )
 
 
 # ----- Random activation -----

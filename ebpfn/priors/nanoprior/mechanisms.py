@@ -6,9 +6,13 @@ draw with two simplex-valued coordinates: ``mechanism`` (how parents map to a ch
 root-marginal problem and near-determinism a mechanism one. Families are grouped so each
 role costs three free coordinates instead of seven; the grouping is a hypothesis the
 Jacobian audit tests. At :data:`ORIGIN` the induced per-family probability is exactly
-``1/8``, and exactly ``1/5`` under ``only_cheap`` — upstream in both modes. Passing no
-eta at all leaves upstream's own draw in place, which is bit-identical rather than merely
-equal in distribution.
+``1/8``, and exactly ``1/5`` under ``only_cheap`` — upstream in both modes.
+
+Passing no eta at all leaves upstream's own ``randchoice`` in place, which is bit-identical
+rather than merely equal in distribution. That path is a fidelity check against the vendored
+generator, not an experimental arm: it consumes a different RNG primitive than weighted
+selection does, so it is not seed-identical to the origin. Experiments use the origin eta,
+which keeps every arm on one code path.
 """
 
 from collections.abc import Sequence
@@ -17,8 +21,6 @@ from typing import Any, Literal, Protocol
 
 import numpy as np
 from torch import Tensor
-
-from ebpfn.priors.simplex import sticks_to_weights, weights_to_sticks
 
 Role = Literal["mechanism", "root"]
 ROLES: tuple[Role, ...] = ("mechanism", "root")
@@ -42,7 +44,11 @@ GROUPS: dict[str, tuple[str, ...]] = {
 }
 GROUP_ORDER: tuple[str, ...] = ("smooth", "polynomial", "piecewise", "multiplicative")
 N_FAMILIES = sum(len(members) for members in GROUPS.values())
-N_STICKS = 2 * (len(GROUP_ORDER) - 1)
+
+# Names the grouping a weight vector is written against. An ungrouped variant would be a
+# different identifier, so positional payloads can never be read under the wrong scheme.
+GROUPING_ID = "mechanism-groups-4-v1"
+ETA_VERSION = "nanoprior-mechanism-eta-2"
 
 # Group mass reproducing upstream's uniform-over-eight draw.
 ORIGIN: tuple[float, ...] = tuple(len(GROUPS[group]) / N_FAMILIES for group in GROUP_ORDER)
@@ -52,7 +58,6 @@ ORIGIN: tuple[float, ...] = tuple(len(GROUPS[group]) / N_FAMILIES for group in G
 CHEAP_GROUPS: tuple[str, ...] = ("smooth", "polynomial", "piecewise")
 
 _GROUP_OF: dict[str, str] = {name: group for group, members in GROUPS.items() for name in members}
-_VERSION = "nanoprior-mechanism-eta-1"
 _SUM_TOL = 1e-6
 
 
@@ -88,25 +93,25 @@ class MechanismEta:
     def weights_for(self, role: Role) -> tuple[float, ...]:
         return self.mechanism if role == "mechanism" else self.root
 
-    @classmethod
-    def from_sticks(cls, vector: Sequence[float]) -> "MechanismEta":
-        """Decode :data:`N_STICKS` unit coordinates, mechanism role first."""
-        if len(vector) != N_STICKS:
-            raise ValueError(f"expected {N_STICKS} stick coordinates, got {len(vector)}")
-        free = len(GROUP_ORDER) - 1
-        return cls(sticks_to_weights(vector[:free]), sticks_to_weights(vector[free:]))
-
-    def to_sticks(self) -> tuple[float, ...]:
-        return weights_to_sticks(self.mechanism) + weights_to_sticks(self.root)
-
     def to_dict(self) -> dict[str, Any]:
-        return {"version": _VERSION, "mechanism": list(self.mechanism), "root": list(self.root)}
+        return {
+            "version": ETA_VERSION,
+            "grouping": GROUPING_ID,
+            "mechanism": list(self.mechanism),
+            "root": list(self.root),
+        }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "MechanismEta":
-        if payload.get("version") != _VERSION:
+        if payload.get("version") != ETA_VERSION:
             raise ValueError(f"unsupported mechanism eta version {payload.get('version')!r}")
+        if payload.get("grouping") != GROUPING_ID:
+            raise ValueError(f"weights are grouped as {payload.get('grouping')!r}, not {GROUPING_ID}")
         return cls(tuple(payload["mechanism"]), tuple(payload["root"]))
+
+
+# Upstream's own mixture, and the null arm every tuned variant is measured against.
+ORIGIN_ETA = MechanismEta()
 
 
 def select(candidates: Sequence[Family], eta: MechanismEta, role: Role) -> Family:

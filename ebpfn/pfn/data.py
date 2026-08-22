@@ -24,7 +24,7 @@ from torch import Tensor
 
 from ebpfn.data.types import CharacterizationShape, TaskPartition, TuningTask
 from ebpfn.priors import HyperPrior, hyperprior_from_dict, hyperprior_to_dict, sample_task
-from ebpfn.priors.nanoprior import MechanismEta
+from ebpfn.priors.nanoprior import ORIGIN_ETA, MechanismEta
 from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
 
@@ -178,17 +178,18 @@ class NanopriorTaskSource:
     """Task source drawing from the vendored TabICLv2 prior under a mechanism ``eta``.
 
     Same interface as :class:`PriorTaskSource`, so the training loop and the bank are
-    indifferent to which one they are handed. ``eta=None`` is upstream's own uniform
-    mixture — the exact null for any tuned variant, and the mixture the released
-    TabICLv2 checkpoint was trained on. ``max_attempts`` bounds the learnability
-    rejection loop, which corner etas can drive long.
+    indifferent to which one they are handed. The default is the origin eta: upstream's
+    own mixture, and the null arm every tuned variant is measured against. Every arm
+    including the null therefore takes the same code path, so arms separated by a small
+    eta step differ only in mixture. ``max_attempts`` bounds the learnability rejection
+    loop, which corner etas can drive long.
     """
 
     def __init__(
         self,
         streams: RandomStreams,
         *,
-        eta: MechanismEta | None = None,
+        eta: MechanismEta = ORIGIN_ETA,
         max_attempts: int | None = None,
     ) -> None:
         self.streams = streams
@@ -206,7 +207,7 @@ class NanopriorTaskSource:
 
     @property
     def eta_payload(self) -> dict[str, Any] | None:
-        return None if self.eta is None else self.eta.to_dict()
+        return self.eta.to_dict()
 
     def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
         return [

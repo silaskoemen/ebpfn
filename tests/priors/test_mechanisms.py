@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 from ebpfn.priors.nanoprior import mechanisms, prior
-from ebpfn.priors.nanoprior.mechanisms import GROUP_ORDER, GROUPS, N_FAMILIES, N_STICKS, ORIGIN, MechanismEta
+from ebpfn.priors.nanoprior.mechanisms import GROUP_ORDER, GROUPS, N_FAMILIES, ORIGIN, MechanismEta
 
 CHEAP = [
     prior.rand_lin_func,
@@ -79,26 +79,18 @@ def test_rejects_malformed_weights() -> None:
         MechanismEta(mechanism=(-0.5, 0.5, 0.5, 0.5))
 
 
-def test_stick_coordinates_round_trip() -> None:
-    eta = MechanismEta(mechanism=(0.1, 0.2, 0.3, 0.4), root=(0.4, 0.3, 0.2, 0.1))
-    sticks = eta.to_sticks()
-    assert len(sticks) == N_STICKS
-    restored = MechanismEta.from_sticks(sticks)
-    assert restored.mechanism == pytest.approx(eta.mechanism)
-    assert restored.root == pytest.approx(eta.root)
-
-
-def test_sticks_carry_the_mechanism_role_first() -> None:
-    eta = MechanismEta.from_sticks([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
-    assert eta.mechanism == pytest.approx((1.0, 0.0, 0.0, 0.0))
-    assert eta.root == pytest.approx((0.0, 1.0, 0.0, 0.0))
-
-
 def test_serialization_round_trips() -> None:
     eta = MechanismEta(mechanism=(0.1, 0.2, 0.3, 0.4))
-    assert MechanismEta.from_dict(eta.to_dict()).mechanism == pytest.approx(eta.mechanism)
+    payload = eta.to_dict()
+    assert MechanismEta.from_dict(payload).mechanism == pytest.approx(eta.mechanism)
     with pytest.raises(ValueError, match="unsupported"):
-        MechanismEta.from_dict({"version": "nope", "mechanism": list(ORIGIN), "root": list(ORIGIN)})
+        MechanismEta.from_dict({**payload, "version": "nope"})
+
+
+def test_weights_cannot_be_read_under_another_grouping() -> None:
+    """Positional weights are meaningless without the grouping that wrote them."""
+    with pytest.raises(ValueError, match="grouped as"):
+        MechanismEta.from_dict({**MechanismEta().to_dict(), "grouping": "mechanism-families-8-v1"})
 
 
 def test_rand_func_without_eta_leaves_upstream_untouched() -> None:
@@ -132,3 +124,27 @@ def test_rand_points_draws_from_the_root_role() -> None:
     finally:
         prior.rand_func = original
     assert seen[0] == "root"
+
+
+def test_product_operands_keep_the_callers_role() -> None:
+    """Without this, a multiplicative root draw pulls its operands from the mechanism simplex."""
+    eta = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 0.0, 0.01, 0.99))
+    drawn = []
+    real_select = mechanisms.select
+
+    def spy(candidates, eta, role):
+        chosen = real_select(candidates, eta, role)
+        drawn.append((role, chosen.__name__))
+        return chosen
+
+    prior.select = spy
+    try:
+        np.random.seed(0)
+        torch.manual_seed(0)
+        for _ in range(4):
+            prior.rand_points(32, 3, eta)
+    finally:
+        prior.select = real_select
+
+    assert ("root", "rand_prod_func") in drawn, "the eta must actually reach the product path"
+    assert {role for role, _ in drawn} == {"root"}

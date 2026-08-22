@@ -33,7 +33,8 @@ to a family draw (`rand_dataset_filtered`, `rand_dataset_plain`, `rand_node_func
 `rand_converter`, `rand_multi_func`, `rand_func`, `rand_prod_func`, `rand_points`). It
 replaces upstream's uniform choice over the eight mechanism families with a grouped
 simplex, split by role -- `rand_points` draws under the root-marginal simplex, every
-other site under the mechanism simplex. See `mechanisms.py`.
+other site under the mechanism simplex, and `rand_prod_func` passes the caller's role to
+both operands so a multiplicative root draw stays in the root role. See `mechanisms.py`.
 
 `eta=None` is the default everywhere and takes upstream's own `randchoice` branch, so
 the unmodified path is bit-identical, not merely equal in distribution; a test in
@@ -60,15 +61,10 @@ deterministic seeding through `RandomStreams`).
 Why vendored
 ------------
 nanotabicl is not published to PyPI, so the generator is copied in rather than depended
-on. It is here to answer one question: measured at equal training budget on the same
-frozen backbone, does the TabICLv2 prior produce a better model than ebpfn's own
-generator? Our own generator covers real-corpus property ranges poorly (feature skew
-covers 1 of 9 real datasets; 2% of tasks are near-deterministic against 33% in real
-data), which this arm is meant to confirm or refute.
-
-If it wins, the mechanism library gets reimplemented against ebpfn's contracts with
-tunable coordinates and this vendored copy is deleted; if it does not, the copy is
-deleted and the completeness argument was wrong. Either way this directory is temporary.
+on. This is ebpfn's generator: the hyperprior being tuned is a parameterization of it,
+added through the coordinates documented above rather than by rewriting the mechanisms.
+Keeping the copy close to upstream is what makes the origin eta an exact null, since the
+released TabICLv2 checkpoint was pretrained on this distribution.
 
 Relationship to `ebpfn/pfn/nanotabicl/`
 ---------------------------------------
