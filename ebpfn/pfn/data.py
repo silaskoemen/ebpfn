@@ -20,7 +20,7 @@ import torch
 from torch import Tensor
 
 from ebpfn.data.types import CharacterizationShape, TaskPartition, TuningTask
-from ebpfn.priors.nanoprior import ORIGIN_ETA, MechanismEta
+from ebpfn.priors.nanoprior import ORIGIN_ETA, PriorEta
 from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
 
@@ -112,7 +112,7 @@ class TaskSource(Protocol):
     """What the training loop needs from wherever tasks come from.
 
     ``eta_payload`` is the JSON-able identity of the generating prior — a nanoprior
-    ``MechanismEta``, or ``None`` for a prior with no tunable coordinates. Checkpoints
+    ``PriorEta``, or ``None`` for a prior with no tunable coordinates. Checkpoints
     record it and resume compares it.
     """
 
@@ -146,7 +146,7 @@ class NanopriorTaskSource:
         self,
         streams: RandomStreams,
         *,
-        eta: MechanismEta = ORIGIN_ETA,
+        eta: PriorEta = ORIGIN_ETA,
         max_attempts: int | None = None,
     ) -> None:
         self.streams = streams

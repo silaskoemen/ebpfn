@@ -13,19 +13,21 @@ from ebpfn.config.base import StrictConfigModel
 
 
 class NanopriorConfig(StrictConfigModel):
-    """The mechanism mixture the PFN trains against.
+    """The prior the PFN trains against: a mechanism mixture plus lifted sampling sites.
 
-    An unset role stays at upstream's own mixture, which is what the released checkpoint
-    was pretrained on, so a run left at the defaults is the null arm. The origin is not
-    written out here: ``MechanismEta`` owns it, and the config layer must not import the
-    generator. This checks only that a supplied mixture is a probability vector; whether
-    it is a valid one for the current grouping is ``MechanismEta``'s to enforce.
-    ``max_attempts`` bounds the learnability rejection loop, which corner mixtures can
-    drive long.
+    Anything unset stays at upstream's own distribution, which is what the released
+    checkpoint was pretrained on, so a run left at the defaults is the null arm. The origin
+    is not written out here: ``PriorEta`` owns it, and the config layer must not import the
+    generator. This checks only shape -- that a mixture is a probability vector and that
+    site coordinates lie in the unit cube. Whether a mixture is valid for the current
+    grouping, and whether a site name exists, are ``PriorEta``'s to enforce.
+    ``max_attempts`` bounds the learnability rejection loop, which corner etas can drive
+    long.
     """
 
     mechanism: tuple[float, ...] | None = None
     root: tuple[float, ...] | None = None
+    scalars: dict[str, tuple[float, float]] | None = None
     max_attempts: int | None = None
 
     @field_validator("mechanism", "root", mode="before")
@@ -40,6 +42,9 @@ class NanopriorConfig(StrictConfigModel):
                 continue
             if any(weight < 0.0 for weight in weights) or abs(sum(weights) - 1.0) > 1e-6:
                 raise ValueError(f"{role} weights must be nonnegative and sum to one")
+        for site, coordinates in (self.scalars or {}).items():
+            if any(not 0.0 <= value <= 1.0 for value in coordinates):
+                raise ValueError(f"{site} coordinates must lie in the unit interval, got {coordinates}")
         if self.max_attempts is not None and self.max_attempts < 1:
             raise ValueError("max_attempts must be positive when set")
         return self

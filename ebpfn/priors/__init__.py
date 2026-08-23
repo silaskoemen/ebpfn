@@ -2,22 +2,26 @@
 
 from ebpfn.priors.contracts import GeneratedTask
 from ebpfn.priors.nanoprior import (
-    ALL_BLOCKS,
+    ALL_GROUPS,
     GROUP_ORDER,
     ORIGIN,
     ORIGIN_ETA,
+    SITE_NAMES,
     EtaSpace,
-    MechanismEta,
+    PriorEta,
+    groups_in_block,
     sample_task,
 )
 
 __all__ = [
-    "ALL_BLOCKS",
+    "ALL_GROUPS",
     "GROUP_ORDER",
     "ORIGIN",
     "ORIGIN_ETA",
+    "SITE_NAMES",
     "EtaSpace",
     "GeneratedTask",
-    "MechanismEta",
+    "PriorEta",
+    "groups_in_block",
     "sample_task",
 ]

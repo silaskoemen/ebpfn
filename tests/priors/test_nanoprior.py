@@ -9,7 +9,7 @@ import pytest
 import torch
 from ebpfn.data import CharacterizationShape
 from ebpfn.pfn.data import NanopriorTaskSource, collate_tasks
-from ebpfn.priors.nanoprior import MechanismEta, prior, sample_task
+from ebpfn.priors.nanoprior import PriorEta, prior, sample_task
 from ebpfn.utils import RandomStreams
 
 
@@ -77,7 +77,7 @@ def test_source_batches_collate_for_the_backbone() -> None:
 def test_eta_changes_the_task_and_its_identity() -> None:
     """A tuned mixture must be a different prior, and must not collide in a cache."""
     baseline = sample_task(_shape(), RandomStreams(0), "t").tuning
-    smooth = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0))
+    smooth = PriorEta(mechanism=(1.0, 0.0, 0.0, 0.0))
     tuned = sample_task(_shape(), RandomStreams(0), "t", eta=smooth).tuning
 
     assert tuned.task_id != baseline.task_id
@@ -86,8 +86,8 @@ def test_eta_changes_the_task_and_its_identity() -> None:
 
 
 def test_eta_is_recorded_on_the_generated_task() -> None:
-    generated = sample_task(_shape(), RandomStreams(0), "t", eta=MechanismEta())
-    assert generated.diagnostics["eta"] == MechanismEta().to_dict()
+    generated = sample_task(_shape(), RandomStreams(0), "t", eta=PriorEta())
+    assert generated.diagnostics["eta"] == PriorEta().to_dict()
     assert sample_task(_shape(), RandomStreams(0), "t").diagnostics["eta"] is None
 
 
@@ -101,7 +101,7 @@ def test_task_source_carries_its_eta() -> None:
     shape = _shape()
     streams = RandomStreams(0)
     baseline = NanopriorTaskSource(streams).sample_batch(2, shape, "batch")
-    tuned = NanopriorTaskSource(streams, eta=MechanismEta(root=(1.0, 0.0, 0.0, 0.0))).sample_batch(2, shape, "batch")
+    tuned = NanopriorTaskSource(streams, eta=PriorEta(root=(1.0, 0.0, 0.0, 0.0))).sample_batch(2, shape, "batch")
 
     assert [task.task_id for task in baseline] != [task.task_id for task in tuned]
     assert collate_tasks(tuned).x.shape == collate_tasks(baseline).x.shape

@@ -4,7 +4,7 @@ import pytest
 import torch
 from ebpfn.data.types import CharacterizationShape, FeatureSchema, TaskPartition, TuningTask
 from ebpfn.pfn.data import NanopriorTaskSource, collate_tasks
-from ebpfn.priors import MechanismEta
+from ebpfn.priors import PriorEta
 from ebpfn.utils import RandomStreams
 
 
@@ -84,7 +84,7 @@ def test_sources_at_one_identity_share_their_seed() -> None:
     shape = CharacterizationShape(32, 16, 4, 0, "regression")
     streams = RandomStreams(7)
     baseline = NanopriorTaskSource(streams)
-    tuned = NanopriorTaskSource(streams, eta=MechanismEta(root=(1.0, 0.0, 0.0, 0.0)))
+    tuned = NanopriorTaskSource(streams, eta=PriorEta(root=(1.0, 0.0, 0.0, 0.0)))
 
     assert baseline.eta_payload != tuned.eta_payload
     assert (

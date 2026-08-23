@@ -20,7 +20,7 @@ from ebpfn.pfn.train import (
     train_pfn,
     trainable_parameters,
 )
-from ebpfn.priors.nanoprior import MechanismEta
+from ebpfn.priors.nanoprior import PriorEta
 from ebpfn.utils import RandomStreams
 
 
@@ -185,7 +185,7 @@ def test_custom_source_seed_must_match_training_seed() -> None:
 def test_baseline_and_tuned_sources_build_identical_heads() -> None:
     arch, train = _configs(steps=1)
     baseline = NanopriorTaskSource(RandomStreams(train.seed))
-    tuned = NanopriorTaskSource(RandomStreams(train.seed), eta=MechanismEta(mechanism=(0.7, 0.1, 0.1, 0.1)))
+    tuned = NanopriorTaskSource(RandomStreams(train.seed), eta=PriorEta(mechanism=(0.7, 0.1, 0.1, 0.1)))
 
     baseline_model, _ = train_pfn(arch, train, source=baseline, log_every=0)
     tuned_model, _ = train_pfn(arch, train, source=tuned, log_every=0)
@@ -194,7 +194,7 @@ def test_baseline_and_tuned_sources_build_identical_heads() -> None:
 
 def test_checkpoint_records_exact_tuned_source_and_training_config(tmp_path: Path) -> None:
     arch, train = _configs(steps=1)
-    eta = MechanismEta(mechanism=(0.1, 0.2, 0.6, 0.1))
+    eta = PriorEta(mechanism=(0.1, 0.2, 0.6, 0.1))
     source = NanopriorTaskSource(RandomStreams(train.seed), eta=eta)
 
     _, result = train_pfn(arch, train, source=source, checkpoint_dir=tmp_path, log_every=0)
@@ -265,13 +265,13 @@ def test_quantile_head_round_trips_through_a_checkpoint(tmp_path: Path) -> None:
         anchor_probe_score=8,
         anchor_features=4,
     )
-    source = NanopriorTaskSource(RandomStreams(train.seed), eta=MechanismEta(), max_attempts=50)
+    source = NanopriorTaskSource(RandomStreams(train.seed), eta=PriorEta(), max_attempts=50)
     _, result = train_pfn(arch, train, source=source, checkpoint_dir=tmp_path)
 
     reloaded, checkpoint = load_checkpoint(result.checkpoint_path)
     assert isinstance(reloaded.distribution, QuantileDistribution)
     assert reloaded.n_outputs == 16
-    assert checkpoint["source_eta"] == MechanismEta().to_dict()
+    assert checkpoint["source_eta"] == PriorEta().to_dict()
 
 
 @pytest.mark.skipif(

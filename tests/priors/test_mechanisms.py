@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 import torch
 from ebpfn.priors.nanoprior import mechanisms, prior
-from ebpfn.priors.nanoprior.mechanisms import GROUP_ORDER, GROUPS, N_FAMILIES, ORIGIN, MechanismEta
+from ebpfn.priors.nanoprior.eta import PriorEta
+from ebpfn.priors.nanoprior.mechanisms import GROUP_ORDER, GROUPS, N_FAMILIES, ORIGIN
 
 CHEAP = [
     prior.rand_lin_func,
@@ -18,9 +19,10 @@ CHEAP = [
 ALL = [*CHEAP, prior.rand_mlp_func, prior.rand_em_func, prior.rand_prod_func]
 
 
-def _frequencies(candidates: list, eta: MechanismEta, role: str, draws: int = 40_000) -> dict[str, float]:
+def _frequencies(candidates: list, eta: PriorEta, role: str, draws: int = 40_000) -> dict[str, float]:
     np.random.seed(0)
-    counts = collections.Counter(mechanisms.select(candidates, eta, role).__name__ for _ in range(draws))
+    weights = eta.weights_for(role)
+    counts = collections.Counter(mechanisms.select(candidates, weights).__name__ for _ in range(draws))
     return {name: count / draws for name, count in counts.items()}
 
 
@@ -34,7 +36,7 @@ def test_groups_partition_the_family_library() -> None:
 def test_origin_reproduces_the_uniform_draw() -> None:
     """The exact null: origin weights induce 1/8 per family, not merely something close."""
     assert sum(ORIGIN) == pytest.approx(1.0)
-    frequencies = _frequencies(ALL, MechanismEta(), "mechanism")
+    frequencies = _frequencies(ALL, PriorEta(), "mechanism")
     assert len(frequencies) == N_FAMILIES
     for name, share in frequencies.items():
         assert share == pytest.approx(1.0 / N_FAMILIES, abs=0.01), name
@@ -42,14 +44,14 @@ def test_origin_reproduces_the_uniform_draw() -> None:
 
 def test_origin_survives_the_only_cheap_restriction() -> None:
     """Masking per family and renormalizing gives 1/5; dropping whole groups would not."""
-    frequencies = _frequencies(CHEAP, MechanismEta(), "mechanism")
+    frequencies = _frequencies(CHEAP, PriorEta(), "mechanism")
     assert len(frequencies) == len(CHEAP)
     for name, share in frequencies.items():
         assert share == pytest.approx(1.0 / len(CHEAP), abs=0.01), name
 
 
 def test_group_mass_is_split_evenly_across_members() -> None:
-    piecewise = MechanismEta(mechanism=(0.0, 0.0, 1.0, 0.0))
+    piecewise = PriorEta(mechanism=(0.0, 0.0, 1.0, 0.0))
     frequencies = _frequencies(ALL, piecewise, "mechanism")
     assert set(frequencies) == set(GROUPS["piecewise"])
     for share in frequencies.values():
@@ -57,7 +59,7 @@ def test_group_mass_is_split_evenly_across_members() -> None:
 
 
 def test_roles_are_independent() -> None:
-    eta = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 1.0, 0.0, 0.0))
+    eta = PriorEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 1.0, 0.0, 0.0))
     assert set(_frequencies(ALL, eta, "mechanism")) == set(GROUPS["smooth"])
     assert set(_frequencies(ALL, eta, "root")) == set(GROUPS["polynomial"])
 
@@ -65,32 +67,32 @@ def test_roles_are_independent() -> None:
 def test_all_multiplicative_mass_is_rejected_at_construction() -> None:
     """The one excluded vertex: only_cheap has no multiplicative member to draw."""
     with pytest.raises(ValueError, match="only_cheap"):
-        MechanismEta(mechanism=(0.0, 0.0, 0.0, 1.0))
+        PriorEta(mechanism=(0.0, 0.0, 0.0, 1.0))
     with pytest.raises(ValueError, match="only_cheap"):
-        MechanismEta(root=(0.0, 0.0, 0.0, 1.0))
+        PriorEta(root=(0.0, 0.0, 0.0, 1.0))
 
 
 def test_rejects_malformed_weights() -> None:
     with pytest.raises(ValueError, match="one entry per group"):
-        MechanismEta(mechanism=(0.5, 0.5))
+        PriorEta(mechanism=(0.5, 0.5))
     with pytest.raises(ValueError, match="sum to one"):
-        MechanismEta(mechanism=(0.5, 0.5, 0.5, 0.5))
+        PriorEta(mechanism=(0.5, 0.5, 0.5, 0.5))
     with pytest.raises(ValueError, match="nonnegative"):
-        MechanismEta(mechanism=(-0.5, 0.5, 0.5, 0.5))
+        PriorEta(mechanism=(-0.5, 0.5, 0.5, 0.5))
 
 
 def test_serialization_round_trips() -> None:
-    eta = MechanismEta(mechanism=(0.1, 0.2, 0.3, 0.4))
+    eta = PriorEta(mechanism=(0.1, 0.2, 0.3, 0.4))
     payload = eta.to_dict()
-    assert MechanismEta.from_dict(payload).mechanism == pytest.approx(eta.mechanism)
+    assert PriorEta.from_dict(payload).mechanism == pytest.approx(eta.mechanism)
     with pytest.raises(ValueError, match="unsupported"):
-        MechanismEta.from_dict({**payload, "version": "nope"})
+        PriorEta.from_dict({**payload, "version": "nope"})
 
 
 def test_weights_cannot_be_read_under_another_grouping() -> None:
     """Positional weights are meaningless without the grouping that wrote them."""
     with pytest.raises(ValueError, match="grouped as"):
-        MechanismEta.from_dict({**MechanismEta().to_dict(), "grouping": "mechanism-families-8-v1"})
+        PriorEta.from_dict({**PriorEta().to_dict(), "grouping": "mechanism-families-8-v1"})
 
 
 def test_rand_func_without_eta_leaves_upstream_untouched() -> None:
@@ -108,7 +110,7 @@ def test_rand_func_without_eta_leaves_upstream_untouched() -> None:
 
 def test_rand_points_draws_from_the_root_role() -> None:
     """Root marginals ignore the mechanism simplex; only the root one shapes them."""
-    eta = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 1.0, 0.0, 0.0))
+    eta = PriorEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 1.0, 0.0, 0.0))
     seen = []
     original = prior.rand_func
 
@@ -128,12 +130,14 @@ def test_rand_points_draws_from_the_root_role() -> None:
 
 def test_product_operands_keep_the_callers_role() -> None:
     """Without this, a multiplicative root draw pulls its operands from the mechanism simplex."""
-    eta = MechanismEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 0.0, 0.01, 0.99))
+    eta = PriorEta(mechanism=(1.0, 0.0, 0.0, 0.0), root=(0.0, 0.0, 0.01, 0.99))
     drawn = []
     real_select = mechanisms.select
 
-    def spy(candidates, eta, role):
-        chosen = real_select(candidates, eta, role)
+    def spy(candidates, weights):
+        # select takes weights, not a role, so recover the role from which simplex it got.
+        role = "mechanism" if tuple(weights) == eta.mechanism else "root"
+        chosen = real_select(candidates, weights)
         drawn.append((role, chosen.__name__))
         return chosen
 

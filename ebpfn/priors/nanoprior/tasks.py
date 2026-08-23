@@ -26,8 +26,9 @@ import torch
 
 from ebpfn.data import CharacterizationShape, FeatureSchema, TaskPartition, TuningTask, content_hash
 from ebpfn.priors.contracts import GeneratedTask
-from ebpfn.priors.nanoprior.mechanisms import MechanismEta
+from ebpfn.priors.nanoprior.eta import PriorEta
 from ebpfn.priors.nanoprior.prior import rand_dataset_filtered
+from ebpfn.priors.nanoprior.scalars import active_scalars
 from ebpfn.utils import RandomRole, RandomStreams
 
 _SEED_BOUND = 2**31 - 1
@@ -51,15 +52,16 @@ def sample_task(
     shape: CharacterizationShape,
     streams: RandomStreams,
     *identity: str | int,
-    eta: MechanismEta | None = None,
+    eta: PriorEta | None = None,
     max_attempts: int | None = None,
 ) -> GeneratedTask:
     """Draw one regression task from the vendored TabICLv2 prior at an exact shape.
 
     Upstream rejection-samples until an ExtraTrees out-of-bag test finds signal
     (p < 0.05), so the returned task is never pure noise — the learnability filter
-    ebpfn's own generator lacks. ``eta`` reweights the mechanism mixture; ``None``
-    leaves upstream's uniform draw untouched.
+    ebpfn's own generator lacks. ``eta`` reweights the mechanism mixture and
+    reparameterizes any lifted sampling site; ``None`` leaves upstream's own draws
+    untouched, and an eta at the origin reproduces them site-for-site.
     """
     if shape.p_categorical != 0:
         raise ValueError("nanoprior tasks are numeric-only until the task contracts carry categoricals")
@@ -71,7 +73,7 @@ def sample_task(
     rng = streams.generator(RandomRole.GENERATION, "nanoprior", n, p, *identity)
     seed = int(rng.integers(0, _SEED_BOUND))
 
-    with seeded_globals(seed):
+    with seeded_globals(seed), active_scalars({} if eta is None else eta.scalars):
         # y_cat_sizes=[0] selects the numeric (regression) target branch upstream.
         columns = rand_dataset_filtered(
             x_cat_sizes=[0] * p, y_cat_sizes=[0], n_samples=n, eta=eta, max_attempts=max_attempts

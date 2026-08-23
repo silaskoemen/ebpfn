@@ -24,7 +24,7 @@ from ebpfn.pfn.model import EBPFNModel
 from ebpfn.pfn.nanotabicl import NanoTabICLv2
 from ebpfn.pfn.quantile import QuantileDistribution, default_levels
 from ebpfn.pfn.shapes import sample_training_shape
-from ebpfn.priors.nanoprior import MechanismEta
+from ebpfn.priors.nanoprior import PriorEta
 from ebpfn.utils import RandomRole, RandomStreams
 
 MPS_MEMORY_FRACTION = 0.6
@@ -138,12 +138,13 @@ def anchor_shape(train: PfnTrainConfig) -> CharacterizationShape:
 
 
 def build_source(train: PfnTrainConfig, streams: RandomStreams) -> TaskSource:
-    """Task source for the configured mixture; an unset role stays at the origin."""
-    origin = MechanismEta()
+    """Task source for the configured prior; anything unset stays at the origin."""
+    origin = PriorEta()
     prior = train.prior
-    eta = MechanismEta(
+    eta = PriorEta(
         mechanism=prior.mechanism if prior.mechanism is not None else origin.mechanism,
         root=prior.root if prior.root is not None else origin.root,
+        scalars=prior.scalars if prior.scalars is not None else origin.scalars,
     )
     return NanopriorTaskSource(streams, eta=eta, max_attempts=prior.max_attempts)
 
