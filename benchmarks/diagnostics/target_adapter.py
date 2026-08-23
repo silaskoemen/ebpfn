@@ -36,8 +36,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
+from benchmarks.base import released_base_checkpoint
 from benchmarks.baselines import gaussian_nll, gp_fit_predict, rmse
-from benchmarks.corpus import DEFAULT_BASE
 from benchmarks.studies.characterization import _load_openml_regression_dataset
 from ebpfn.config import PfnArchConfig, PfnTrainConfig, PreprocessingConfig
 from ebpfn.data import FeatureSchema, TaskPartition, TuningTask
@@ -324,13 +324,13 @@ def run(checkpoint: Path, datasets: list[str], steps: int, gp_max: int, seed: in
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--checkpoint", type=Path, default=DEFAULT_BASE)
+    ap.add_argument("--checkpoint", type=Path, default=None, help="defaults to the released base")
     ap.add_argument("--datasets", nargs="+", default=DATASETS)
     ap.add_argument("--steps", type=int, default=200)
     ap.add_argument("--gp-max", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    run(args.checkpoint, args.datasets, args.steps, args.gp_max, args.seed)
+    run(args.checkpoint or released_base_checkpoint(), args.datasets, args.steps, args.gp_max, args.seed)
 
 
 if __name__ == "__main__":

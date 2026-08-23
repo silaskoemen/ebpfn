@@ -25,8 +25,9 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
+from benchmarks.base import released_base_checkpoint
 from benchmarks.baselines import gp_fit_predict, rmse
-from benchmarks.corpus import CHAR_DIR, DEFAULT_BASE, iter_real_tasks
+from benchmarks.corpus import CHAR_DIR, iter_real_tasks
 from ebpfn.pfn.data import collate_tasks
 from ebpfn.pfn.train import load_checkpoint, select_device
 from sklearn.linear_model import RidgeCV
@@ -122,10 +123,10 @@ def run(checkpoint: Path, gp_max: int) -> pl.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--checkpoint", type=Path, default=DEFAULT_BASE)
+    ap.add_argument("--checkpoint", type=Path, default=None, help="defaults to the released base")
     ap.add_argument("--gp-max", type=int, default=3000)
     args = ap.parse_args()
-    run(args.checkpoint, args.gp_max)
+    run(args.checkpoint or released_base_checkpoint(), args.gp_max)
 
 
 if __name__ == "__main__":

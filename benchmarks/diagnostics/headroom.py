@@ -19,8 +19,9 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import torch
+from benchmarks.base import released_base_checkpoint
 from benchmarks.baselines import catboost_fit_predict, coverage90, gaussian_nll, gp_fit_predict, rmse
-from benchmarks.corpus import CHAR_DIR, DEFAULT_BASE, iter_real_tasks
+from benchmarks.corpus import CHAR_DIR, iter_real_tasks
 from ebpfn.pfn.data import collate_tasks
 from ebpfn.pfn.train import load_checkpoint, select_device
 
@@ -133,11 +134,11 @@ def run(checkpoint: Path, iterations: int, gp_max: int) -> pl.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--checkpoint", type=Path, default=DEFAULT_BASE)
+    ap.add_argument("--checkpoint", type=Path, default=None, help="defaults to the released base")
     ap.add_argument("--iterations", type=int, default=500, help="catboost iterations")
     ap.add_argument("--gp-max", type=int, default=3000, help="max GP train samples")
     args = ap.parse_args()
-    run(args.checkpoint, args.iterations, args.gp_max)
+    run(args.checkpoint or released_base_checkpoint(), args.iterations, args.gp_max)
 
 
 if __name__ == "__main__":

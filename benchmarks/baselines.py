@@ -2,12 +2,13 @@
 headroom diagnostic and (later) the larger bank/validation studies.
 
 Each baseline fits on standardized targets and returns per-row ``(mean, std)`` so a
-Gaussian NLL is directly comparable to the PFN's bar-distribution NLL in the same
-standardized space. sklearn + catboost live in the ``bench`` feature (also in the
+Gaussian NLL is directly comparable to the PFN's own NLL in the same standardized
+space. sklearn + catboost live in the ``bench`` feature (also in the
 ``default`` env); nothing here imports the PFN.
 """
 
 import numpy as np
+from scipy.special import erf, ndtri
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
 
@@ -56,6 +57,27 @@ def gaussian_nll(y: np.ndarray, mean: np.ndarray, std: np.ndarray) -> float:
 
 def rmse(y: np.ndarray, mean: np.ndarray) -> float:
     return float(np.sqrt(np.mean((y - mean) ** 2)))
+
+
+def gaussian_crps(y: np.ndarray, mean: np.ndarray, std: np.ndarray) -> float:
+    """CRPS of a Gaussian forecast, in closed form.
+
+    The PFN's CRPS comes from its own predictive distribution; a Gaussian baseline needs
+    this to be scored on the same axis, and the analytic form avoids the quadrature grid
+    being a second source of difference between the two.
+    """
+    z = (y - mean) / std
+    cdf = 0.5 * (1.0 + erf(z / np.sqrt(2.0)))
+    pdf = np.exp(-0.5 * z**2) / np.sqrt(2.0 * np.pi)
+    return float(np.mean(std * (z * (2.0 * cdf - 1.0) + 2.0 * pdf - 1.0 / np.sqrt(np.pi))))
+
+
+def gaussian_coverage(y: np.ndarray, mean: np.ndarray, std: np.ndarray, level: float) -> float:
+    """Empirical coverage of a Gaussian forecast's central ``level`` interval."""
+    if not 0.0 < level < 1.0:
+        raise ValueError(f"level must lie in (0, 1), got {level}")
+    half = float(ndtri(0.5 + level / 2.0)) * std
+    return float(np.mean(np.abs(y - mean) <= half))
 
 
 def coverage90(y: np.ndarray, mean: np.ndarray, std: np.ndarray) -> float:

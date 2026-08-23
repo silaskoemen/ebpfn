@@ -90,6 +90,10 @@ docs/_build
 # Mypy Cache
 .mypy_cache/
 
+# Model checkpoints: large, and bit-reproducible from the SHA pinned in
+# ebpfn/pfn/checkpoints.py, so they are cached rather than versioned.
+assets/*.pt
+
 # Data files
 **/raw/**
 !benchmarks/results/raw/.gitkeep
