@@ -14,23 +14,21 @@ from pathlib import Path
 
 import torch
 from loguru import logger
-from torch import Tensor
 
 from ebpfn.config.pfn import PfnArchConfig, PfnTrainConfig
 from ebpfn.data.types import CharacterizationShape
 from ebpfn.pfn.checkpoints import TABICL_V2_REGRESSOR, CheckpointSpec, build_from_checkpoint, read_checkpoint
-from ebpfn.pfn.data import PriorTaskSource, TaskSource
-from ebpfn.pfn.distribution import BarDistribution, fixed_borders
+from ebpfn.pfn.data import NanopriorTaskSource, TaskSource
 from ebpfn.pfn.metrics import PredictiveDistribution
 from ebpfn.pfn.model import EBPFNModel
 from ebpfn.pfn.nanotabicl import NanoTabICLv2
 from ebpfn.pfn.quantile import QuantileDistribution, default_levels
-from ebpfn.priors import build_hyperprior
-from ebpfn.priors.shapes import sample_training_shape
+from ebpfn.pfn.shapes import sample_training_shape
+from ebpfn.priors.nanoprior import MechanismEta
 from ebpfn.utils import RandomRole, RandomStreams
 
 MPS_MEMORY_FRACTION = 0.6
-CHECKPOINT_VERSION = "pfn-training-checkpoint-3"
+CHECKPOINT_VERSION = "pfn-training-checkpoint-4"
 
 # Backbone stages, outermost first, matching how the released checkpoint groups them
 # (col_embedder / row_interactor / icl_predictor). A finetune scope keeps a suffix.
@@ -72,21 +70,9 @@ def release_device_cache(device: torch.device) -> None:
         torch.mps.empty_cache()
 
 
-def build_head(arch: PfnArchConfig, borders: Tensor | None = None) -> PredictiveDistribution:
-    """Construct the predictive head ``arch`` selects.
-
-    ``borders`` overrides the derived bar grid, which is how a pre-v3 checkpoint that
-    stored its grid explicitly still reloads exactly.
-    """
-    if arch.head == "quantile":
-        if borders is not None:
-            raise ValueError("borders belong to the bar head, not the quantile head")
-        return QuantileDistribution(default_levels(arch.n_quantiles))
-    if borders is None:
-        borders = fixed_borders(arch.n_bins, inner_bound=arch.target_inner_bound, tail_scale=arch.target_tail_scale)
-    elif borders.numel() - 1 != arch.n_bins:
-        raise ValueError(f"borders imply {borders.numel() - 1} bins but arch.n_bins is {arch.n_bins}")
-    return BarDistribution(borders)
+def build_head(arch: PfnArchConfig) -> PredictiveDistribution:
+    """Construct the predictive head: upstream's quantile grid at ``arch.n_quantiles``."""
+    return QuantileDistribution(default_levels(arch.n_quantiles))
 
 
 def build_backbone(arch: PfnArchConfig) -> NanoTabICLv2:
@@ -107,15 +93,14 @@ def build_backbone(arch: PfnArchConfig) -> NanoTabICLv2:
     )
 
 
-def build_model(arch: PfnArchConfig, borders: Tensor | None = None) -> EBPFNModel:
+def build_model(arch: PfnArchConfig) -> EBPFNModel:
     """Construct an :class:`EBPFNModel` from an architecture config."""
-    return EBPFNModel(build_backbone(arch), build_head(arch, borders))
+    return EBPFNModel(build_backbone(arch), build_head(arch))
 
 
 def released_arch(config: dict) -> PfnArchConfig:
     """The :class:`PfnArchConfig` matching a released TabICLv2 checkpoint's own config."""
     return PfnArchConfig(
-        head="quantile",
         n_quantiles=config["num_quantiles"],
         embed_dim=config["embed_dim"],
         col_num_blocks=config["col_num_blocks"],
@@ -153,7 +138,14 @@ def anchor_shape(train: PfnTrainConfig) -> CharacterizationShape:
 
 
 def build_source(train: PfnTrainConfig, streams: RandomStreams) -> TaskSource:
-    return PriorTaskSource(build_hyperprior(train.prior), streams)
+    """Task source for the configured mixture; an unset role stays at the origin."""
+    origin = MechanismEta()
+    prior = train.prior
+    eta = MechanismEta(
+        mechanism=prior.mechanism if prior.mechanism is not None else origin.mechanism,
+        root=prior.root if prior.root is not None else origin.root,
+    )
+    return NanopriorTaskSource(streams, eta=eta, max_attempts=prior.max_attempts)
 
 
 def _warmup_scale(step: int, warmup_steps: int) -> float:
@@ -181,7 +173,6 @@ def save_checkpoint(
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"checkpoint_step_{step:08d}.pt"
-    borders = model.distribution.borders if isinstance(model.distribution, BarDistribution) else None
     torch.save(
         {
             "checkpoint_version": CHECKPOINT_VERSION,
@@ -189,7 +180,6 @@ def save_checkpoint(
             "optimizer": None if optimizer is None else optimizer.state_dict(),
             "step": step,
             "losses": list(losses),
-            "borders": None if borders is None else borders.detach().cpu(),
             "arch": arch.model_dump(mode="json"),
             "train": train.model_dump(mode="json"),
             "source_eta": None if source is None else source.eta_payload,
@@ -202,15 +192,10 @@ def save_checkpoint(
 
 
 def load_checkpoint(path: Path, *, map_location: str | torch.device = "cpu") -> tuple[EBPFNModel, dict]:
-    """Rebuild a model from a checkpoint and return it with the raw checkpoint dict.
-
-    Reads pre-v3 checkpoints too: those predate the head selector, so they are bar heads
-    whose stored ``borders`` are authoritative.
-    """
+    """Rebuild a model from a checkpoint and return it with the raw checkpoint dict."""
     checkpoint = torch.load(path, map_location=map_location, weights_only=False)
     arch = PfnArchConfig.model_validate(checkpoint["arch"])
-    borders = checkpoint.get("borders")
-    model = build_model(arch, None if borders is None else borders.to(map_location))
+    model = build_model(arch)
     model.load_state_dict(checkpoint["model"])
     return model, checkpoint
 
@@ -320,7 +305,7 @@ def train_pfn(
 
     frozen = sum(1 for parameter in model.parameters() if not parameter.requires_grad)
     logger.info(
-        f"🧠 pfn train | {train.steps} steps | device={device} | head={arch.head}({arch.n_outputs}) | "
+        f"🧠 pfn train | {train.steps} steps | device={device} | head=quantile({arch.n_outputs}) | "
         f"scope={train.finetune_scope} ({len(learning)} tensors learning, {frozen} frozen) | anchor={anchor} | "
         f"microbatch={train.tasks_per_step} x accumulation={train.gradient_accumulation_steps}"
     )

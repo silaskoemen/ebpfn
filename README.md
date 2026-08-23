@@ -45,18 +45,10 @@ validated row/feature applicability bounds are recorded explicitly. Study tables
 schemas, configuration, provenance, and decisions are written below
 `benchmarks/results/characterization`.
 
-Run the Step 3 hierarchical-prior p-complexity audit:
-
-```bash
-pixi run prior-audit
-```
-
-Use `prior_mode=audit` for the denser feature grid. The generator samples varied
-task mechanisms over four routes (SCM, BNN, tree, compositional) at a requested
-shape; the audit checks route-frequency convergence, reproducibility, and that
-per-route complexity and realized SNR stay controlled across the feature grid.
-The joint-Sobol identifiability study is deferred to Step 4. Artifacts are written
-below `benchmarks/results/prior`.
+The task generator is the vendored TabICLv2 prior (`ebpfn/priors/nanoprior`, see
+NOTICE) under a tunable mechanism mixture `eta`. At the origin `eta` it reproduces
+upstream's own mixture, which is the distribution the released checkpoint was
+pretrained on — so the origin is the null arm every tuned variant is measured against.
 
 OpenML acquisition needs network access the first time a task is cached under
 `data/raw/openml`. Reusable package code does not import OpenML or Hydra.

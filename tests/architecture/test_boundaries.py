@@ -30,6 +30,44 @@ def test_application_dependencies_do_not_enter_reusable_modules():
     assert not violations, f"application dependency found in reusable modules: {sorted(set(violations))}"
 
 
+def test_config_layer_does_not_import_the_domain():
+    """``ebpfn.config`` must stay a leaf.
+
+    ``ebpfn.data`` imports it, so any config module importing back into ``ebpfn.priors``
+    or ``ebpfn.pfn`` closes a cycle that only shows up on some import orders. Defaults
+    that need a domain constant are expressed as ``None`` and resolved where the domain
+    object is built.
+    """
+    violations: list[str] = []
+    for path in Path("ebpfn/config").rglob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            modules: list[str] = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+            if any(module.startswith(("ebpfn.priors", "ebpfn.pfn", "ebpfn.data")) for module in modules):
+                violations.append(str(path))
+    assert not violations, f"config module imports the domain: {sorted(set(violations))}"
+
+
+def test_evaluation_never_imports_the_pfn():
+    """The corpus/characterization path must stay free of the model it is used to judge."""
+    violations: list[str] = []
+    for path in Path("ebpfn/characterize").rglob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            modules = (
+                [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module] if isinstance(node, ast.ImportFrom) and node.module else []
+            )
+            if any(module.startswith("ebpfn.pfn") for module in modules):
+                violations.append(str(path))
+    assert not violations, f"characterization imports the PFN: {sorted(set(violations))}"
+
+
 def test_operational_scripts_are_separated_from_scientific_benchmarks():
     # scripts/ holds operational entry points (prepare, tune, train); benchmarks/
     # holds paper-facing studies, diagnostics, comparisons, and ablations.

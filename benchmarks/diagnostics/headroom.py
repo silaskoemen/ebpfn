@@ -20,7 +20,7 @@ import numpy as np
 import polars as pl
 import torch
 from benchmarks.baselines import catboost_fit_predict, coverage90, gaussian_nll, gp_fit_predict, rmse
-from benchmarks.diagnostics.reachability import CHAR_DIR, DEFAULT_BASE, iter_real_tasks
+from benchmarks.corpus import CHAR_DIR, DEFAULT_BASE, iter_real_tasks
 from ebpfn.pfn.data import collate_tasks
 from ebpfn.pfn.train import load_checkpoint, select_device
 

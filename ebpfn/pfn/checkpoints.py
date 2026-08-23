@@ -14,7 +14,7 @@ keys are renamed. Two upstream conventions have to be reconciled:
   the function upstream computes.
 
 The released regressor head emits ``num_quantiles`` quantiles rather than bar logits;
-pair it with :class:`ebpfn.pfn.quantile.QuantileDistribution`, not ``BarDistribution``.
+pair it with :class:`ebpfn.pfn.quantile.QuantileDistribution`.
 """
 
 import hashlib

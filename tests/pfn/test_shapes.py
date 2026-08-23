@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from ebpfn.config import ShapeJitterConfig
 from ebpfn.data import CharacterizationShape
-from ebpfn.priors import sample_training_shape
+from ebpfn.pfn.shapes import sample_training_shape
 
 
 def _anchor() -> CharacterizationShape:

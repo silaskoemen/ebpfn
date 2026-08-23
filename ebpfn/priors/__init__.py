@@ -1,40 +1,23 @@
-"""Hierarchical synthetic task prior: routes, mixture, and shape sampling."""
+"""Synthetic task prior: the vendored TabICLv2 generator under a tunable eta."""
 
-from ebpfn.priors.contracts import (
-    REFERENCE_ROUTE,
-    ROUTE_ORDER,
-    BnnHyperPrior,
-    CompositionalHyperPrior,
-    GeneratedTask,
-    HyperPrior,
-    RouteRealization,
-    ScmHyperPrior,
-    SharedTheta,
-    TreeHyperPrior,
-    hyperprior_from_dict,
-    hyperprior_to_dict,
+from ebpfn.priors.contracts import GeneratedTask
+from ebpfn.priors.nanoprior import (
+    ALL_BLOCKS,
+    GROUP_ORDER,
+    ORIGIN,
+    ORIGIN_ETA,
+    EtaSpace,
+    MechanismEta,
+    sample_task,
 )
-from ebpfn.priors.generate import build_hyperprior, sample_cloud, sample_task
-from ebpfn.priors.shapes import sample_training_shape
-from ebpfn.priors.vectorize import DEFAULT_ACTIVE, EtaVectorizer
 
 __all__ = [
-    "DEFAULT_ACTIVE",
-    "REFERENCE_ROUTE",
-    "ROUTE_ORDER",
-    "BnnHyperPrior",
-    "CompositionalHyperPrior",
-    "EtaVectorizer",
+    "ALL_BLOCKS",
+    "GROUP_ORDER",
+    "ORIGIN",
+    "ORIGIN_ETA",
+    "EtaSpace",
     "GeneratedTask",
-    "HyperPrior",
-    "RouteRealization",
-    "ScmHyperPrior",
-    "SharedTheta",
-    "TreeHyperPrior",
-    "build_hyperprior",
-    "hyperprior_from_dict",
-    "hyperprior_to_dict",
-    "sample_cloud",
+    "MechanismEta",
     "sample_task",
-    "sample_training_shape",
 ]

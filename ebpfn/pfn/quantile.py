@@ -8,9 +8,8 @@ mirrors upstream's defaults (``tail_type="exp"``, ``crossing_method="sort"``, li
 spline interior) so numbers stay comparable to the released model's own reporting;
 the heavier GPD tail option and monotone-spline interior are deliberately not ported.
 
-The API matches :class:`ebpfn.pfn.distribution.BarDistribution` — every method takes
-the raw head output as its first argument — so both heads feed
-:mod:`ebpfn.pfn.metrics` unchanged.
+The API is the :class:`PredictiveDistribution` protocol — every method takes the raw
+head output as its first argument — so any head feeds :mod:`ebpfn.pfn.metrics` unchanged.
 """
 
 import torch

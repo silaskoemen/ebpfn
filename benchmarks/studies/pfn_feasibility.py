@@ -69,7 +69,7 @@ def build_summary_markdown(config: PfnStudyConfig, result: dict[str, Any]) -> st
     headline = [
         f"Status: **{result['status']}**.",
         f"Mode: **{config.mode.name}** | device: **{report['device']}** | "
-        f"parameters: **{report['n_parameters']:,}** | n_bins: {config.arch.n_bins}.",
+        f"parameters: **{report['n_parameters']:,}** | n_quantiles: {config.arch.n_quantiles}.",
         f"Anchor context: **{report['anchor']['rows']} rows x {report['anchor']['features']} features**, "
         f"max_context {report['max_context']} — in regime: **{report['in_regime']}**.",
         f"Profile batch matches training: **{report['profile_tasks_match_training']}** | "

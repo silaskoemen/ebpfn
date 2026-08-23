@@ -1,18 +1,12 @@
-"""PyTorch PFN subsystem: a vendored TabICLv2 backbone with a bar-distribution head,
-trained on ebpfn's own prior. Imported only downstream of the simulator-only tuning
-stack — ``ebpfn/tune`` and ``ebpfn/compare`` must never import this package (the
-candidate-evaluation path stays likelihood-free)."""
+"""PyTorch PFN subsystem: a vendored TabICLv2 backbone with a pluggable predictive
+head, trained on tasks drawn from the nanoprior at a given eta."""
 
-from ebpfn.pfn.data import PairedPriorTaskSource, PriorTaskSource, TaskBatch, collate_tasks
-from ebpfn.pfn.distribution import BarDistribution, fixed_borders
+from ebpfn.pfn.data import NanopriorTaskSource, TaskBatch, collate_tasks
 from ebpfn.pfn.model import EBPFNModel
 
 __all__ = [
-    "BarDistribution",
     "EBPFNModel",
-    "PairedPriorTaskSource",
-    "PriorTaskSource",
+    "NanopriorTaskSource",
     "TaskBatch",
     "collate_tasks",
-    "fixed_borders",
 ]

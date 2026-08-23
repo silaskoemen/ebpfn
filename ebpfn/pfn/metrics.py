@@ -5,10 +5,9 @@ predictive density, so they are mutually consistent. Metrics are computed in the
 model's standardized target space (each task standardized on its own ``probe_fit``);
 point error can be reported on the raw scale via :func:`to_raw` when a scale is supplied.
 
-Both heads are supported through :class:`PredictiveDistribution`: our own
-:class:`~ebpfn.pfn.distribution.BarDistribution` and the released TabICLv2 head's
-:class:`~ebpfn.pfn.quantile.QuantileDistribution`. ``outputs`` below is whichever raw
-head output the distribution consumes — bin logits or quantiles.
+Any head is supported through :class:`PredictiveDistribution`; today that is the
+released TabICLv2 head's :class:`~ebpfn.pfn.quantile.QuantileDistribution`. ``outputs``
+below is whichever raw head output the distribution consumes.
 """
 
 import dataclasses

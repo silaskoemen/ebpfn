@@ -1,8 +1,7 @@
 """Task-to-tensor adapter and the pluggable task source the PFN trains against.
 
-The PFN never sees ebpfn's config directly; it consumes a :class:`PriorTaskSource`
-built from a ``HyperPrior`` (``eta``). Today that ``eta`` comes from the baseline
-prior config; a tuned ``eta`` plugs into the *same* source interface with no change to
+The PFN never sees ebpfn's config directly; it consumes a :class:`TaskSource` sampling
+from a fixed ``eta``. A tuned ``eta`` plugs into the *same* interface with no change to
 the training loop. The adapter maps a :class:`TuningTask` (``probe_fit`` = context/train,
 ``probe_score`` = query/test) to the ``forward(x, y)`` convention of the vendored
 backbone: ``x`` of shape ``(B, n_rows, n_cols)`` with train rows first, ``y`` of shape
@@ -14,8 +13,6 @@ be mapped back to the original target scale.
 """
 
 import dataclasses
-import json
-from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
@@ -23,7 +20,6 @@ import torch
 from torch import Tensor
 
 from ebpfn.data.types import CharacterizationShape, TaskPartition, TuningTask
-from ebpfn.priors import HyperPrior, hyperprior_from_dict, hyperprior_to_dict, sample_task
 from ebpfn.priors.nanoprior import ORIGIN_ETA, MechanismEta
 from ebpfn.priors.nanoprior import sample_task as nanoprior_sample_task
 from ebpfn.utils import RandomStreams
@@ -115,15 +111,15 @@ def collate_tasks(tasks: list[TuningTask]) -> TaskBatch:
 class TaskSource(Protocol):
     """What the training loop needs from wherever tasks come from.
 
-    ``eta_payload`` is the JSON-able identity of the generating prior — an ebpfn
-    ``HyperPrior``, a nanoprior ``MechanismEta``, or ``None`` for a prior with no
-    tunable coordinates. Checkpoints record it and resume compares it.
+    ``eta_payload`` is the JSON-able identity of the generating prior — a nanoprior
+    ``MechanismEta``, or ``None`` for a prior with no tunable coordinates. Checkpoints
+    record it and resume compares it.
     """
 
     streams: RandomStreams
 
     @property
-    def stream_provenance(self) -> dict[str, str | int | bool | None]: ...
+    def stream_provenance(self) -> dict[str, str | int]: ...
 
     @property
     def eta_payload(self) -> dict[str, Any] | None: ...
@@ -133,53 +129,14 @@ class TaskSource(Protocol):
     def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch: ...
 
 
-class PriorTaskSource:
-    """Yields tasks sampled from a fixed ``eta`` — the seam the PFN trains against.
-
-    Construct from the baseline prior now, or from a tuned ``eta`` later; the training
-    loop only ever calls :meth:`sample_batch` / :meth:`tensor_batch`. Determinism comes
-    from the ``(*identity)`` tokens threaded into ``RandomStreams`` (order-independent),
-    exactly as the tuning studies seed task generation.
-    """
-
-    def __init__(self, eta: HyperPrior, streams: RandomStreams) -> None:
-        self.eta = eta
-        self.streams = streams
-
-    @property
-    def stream_provenance(self) -> dict[str, str | int | bool | None]:
-        return {
-            "version": "prior-task-source-1",
-            "base_seed": self.streams.base_seed,
-            "common_random_numbers": False,
-            "pairing_id": None,
-        }
-
-    @property
-    def eta_payload(self) -> dict[str, Any] | None:
-        return hyperprior_to_dict(self.eta)
-
-    @classmethod
-    def from_eta_file(cls, path: Path, streams: RandomStreams) -> "PriorTaskSource":
-        """Load an exact tuned eta artifact as a PFN training source."""
-        payload = json.loads(path.read_text())
-        if not isinstance(payload, dict):
-            raise TypeError("eta artifact must contain a JSON object")
-        return cls(hyperprior_from_dict(payload), streams)
-
-    def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
-        return [sample_task(self.eta, shape, self.streams, *identity, member).tuning for member in range(batch_size)]
-
-    def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
-        return collate_tasks(self.sample_batch(batch_size, shape, *identity))
-
-
 class NanopriorTaskSource:
     """Task source drawing from the vendored TabICLv2 prior under a mechanism ``eta``.
 
-    Same interface as :class:`PriorTaskSource`, so the training loop and the bank are
-    indifferent to which one they are handed. The default is the origin eta: upstream's
-    own mixture, and the null arm every tuned variant is measured against. Every arm
+    Determinism comes from the ``(*identity)`` tokens threaded into ``RandomStreams``
+    (order-independent). ``eta`` is deliberately absent from the seed, so two mixtures at
+    one identity start from the same draws and diverge only once their mechanism
+    selections differ — variance reduction without a pairing protocol. The default is the origin eta:
+    upstream's own mixture, and the null arm every tuned variant is measured against. Every arm
     including the null therefore takes the same code path, so arms separated by a small
     eta step differ only in mixture. ``max_attempts`` bounds the learnability rejection
     loop, which corner etas can drive long.
@@ -197,13 +154,8 @@ class NanopriorTaskSource:
         self.max_attempts = max_attempts
 
     @property
-    def stream_provenance(self) -> dict[str, str | int | bool | None]:
-        return {
-            "version": "nanoprior-task-source-2",
-            "base_seed": self.streams.base_seed,
-            "common_random_numbers": False,
-            "pairing_id": None,
-        }
+    def stream_provenance(self) -> dict[str, str | int]:
+        return {"version": "nanoprior-task-source-3", "base_seed": self.streams.base_seed}
 
     @property
     def eta_payload(self) -> dict[str, Any] | None:
@@ -219,56 +171,3 @@ class NanopriorTaskSource:
 
     def tensor_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> TaskBatch:
         return collate_tasks(self.sample_batch(batch_size, shape, *identity))
-
-
-class PairedPriorTaskSource(PriorTaskSource):
-    """Task source whose eta variants share the same underlying random draws.
-
-    ``pairing_id`` identifies one frozen paired experiment. Callers must use the
-    same seed, shape, pairing ID, and per-task identity for every eta variant.
-    Generated task IDs remain eta-specific because ``sample_task`` always hashes
-    eta into the public task identity even on its common-random-number path.
-    """
-
-    def __init__(self, eta: HyperPrior, streams: RandomStreams, *, pairing_id: str) -> None:
-        super().__init__(eta, streams)
-        if not pairing_id:
-            raise ValueError("paired task source requires a nonempty pairing_id")
-        self.pairing_id = pairing_id
-
-    @classmethod
-    def from_paired_eta_file(
-        cls,
-        path: Path,
-        streams: RandomStreams,
-        *,
-        pairing_id: str,
-    ) -> "PairedPriorTaskSource":
-        payload = json.loads(path.read_text())
-        if not isinstance(payload, dict):
-            raise TypeError("eta artifact must contain a JSON object")
-        return cls(hyperprior_from_dict(payload), streams, pairing_id=pairing_id)
-
-    @property
-    def stream_provenance(self) -> dict[str, str | int | bool | None]:
-        return {
-            "version": "paired-prior-task-source-1",
-            "base_seed": self.streams.base_seed,
-            "common_random_numbers": True,
-            "pairing_id": self.pairing_id,
-        }
-
-    def sample_batch(self, batch_size: int, shape: CharacterizationShape, *identity: str | int) -> list[TuningTask]:
-        return [
-            sample_task(
-                self.eta,
-                shape,
-                self.streams,
-                "paired-prior-task-source-1",
-                self.pairing_id,
-                *identity,
-                member,
-                common_random_numbers=True,
-            ).tuning
-            for member in range(batch_size)
-        ]

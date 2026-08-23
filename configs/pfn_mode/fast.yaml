@@ -8,7 +8,7 @@ mode:
   profile_tasks: 8
 
 arch:
-  n_bins: 200
+  n_quantiles: 200
   embed_dim: 32
   col_num_blocks: 1
   row_num_blocks: 1

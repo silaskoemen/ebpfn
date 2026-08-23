@@ -2,8 +2,13 @@ import json
 from pathlib import Path
 
 from benchmarks.studies.pfn_feasibility import write_study_artifacts
-from ebpfn.config.pfn import PfnArchConfig, PfnStudyConfig, PfnStudyModeConfig, PfnTrainConfig
-from ebpfn.config.prior import ShapeJitterConfig
+from ebpfn.config.pfn import (
+    PfnArchConfig,
+    PfnStudyConfig,
+    PfnStudyModeConfig,
+    PfnTrainConfig,
+    ShapeJitterConfig,
+)
 from ebpfn.pfn.train import MPS_MEMORY_FRACTION
 
 
@@ -13,7 +18,6 @@ def _config() -> PfnStudyConfig:
             name="fast", output_dir="unused", smoke_steps=6, profile_rows=[32], profile_features=[4], profile_tasks=2
         ),
         arch=PfnArchConfig(
-            n_bins=64,
             embed_dim=16,
             col_num_blocks=1,
             row_num_blocks=1,
@@ -38,11 +42,10 @@ def _config() -> PfnStudyConfig:
     )
 
 
-def test_default_output_grid_is_the_frozen_256_bin_protocol() -> None:
+def test_default_output_grid_matches_the_released_head() -> None:
     arch = PfnArchConfig()
-    assert arch.n_bins == 256
-    assert arch.target_inner_bound == 5.0
-    assert arch.target_tail_scale == 1.0
+    assert arch.n_quantiles == 999
+    assert arch.n_outputs == 999
 
 
 def test_frozen_feasibility_decision_matches_default_configs() -> None:

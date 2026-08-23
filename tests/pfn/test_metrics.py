@@ -2,25 +2,21 @@ import math
 
 import pytest
 import torch
-from ebpfn.pfn.distribution import BarDistribution, fixed_borders
 from ebpfn.pfn.metrics import compute_metrics, compute_row_metrics, to_raw
+from ebpfn.pfn.quantile import QuantileDistribution, default_levels
 
 
-def _calibrated_gaussian_logits(borders: torch.Tensor, n: int) -> torch.Tensor:
-    def phi(x: torch.Tensor) -> torch.Tensor:
-        return 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
-
-    mass = (phi(borders[1:]) - phi(borders[:-1])).clamp_min(1e-12)
-    return torch.log(mass / mass.sum()).unsqueeze(0).expand(n, -1)
+def _standard_normal_quantiles(levels: torch.Tensor, n: int) -> torch.Tensor:
+    """Outputs of a head that predicts N(0,1) exactly, one row per observation."""
+    return (math.sqrt(2.0) * torch.erfinv(2.0 * levels.double() - 1.0)).float().unsqueeze(0).expand(n, -1)
 
 
 def test_calibrated_model_is_well_calibrated() -> None:
-    borders = fixed_borders(300)
-    bd = BarDistribution(borders)
+    distribution = QuantileDistribution(default_levels(999))
     n = 20_000
-    logits = _calibrated_gaussian_logits(borders, n)
+    logits = _standard_normal_quantiles(distribution.levels, n)
     y = torch.randn(n)
-    metrics = compute_metrics(bd, logits, y)
+    metrics = compute_metrics(distribution, logits, y)
 
     # NLL ~ differential entropy of N(0,1); coverage ~ nominal on a matched model.
     assert metrics.nll == pytest.approx(0.5 * math.log(2 * math.pi * math.e), abs=0.02)
@@ -47,9 +43,8 @@ def test_to_raw_applies_batched_task_statistics_by_row() -> None:
 
 
 def test_aggregate_metrics_reproduce_from_row_contributions() -> None:
-    borders = fixed_borders(32)
-    distribution = BarDistribution(borders)
-    logits = torch.randn(7, 32)
+    distribution = QuantileDistribution(default_levels(32))
+    logits = _standard_normal_quantiles(distribution.levels, 7)
     y = torch.randn(7)
 
     rows = compute_row_metrics(distribution, logits, y, crps_grid_size=64)

@@ -1,14 +1,12 @@
-import dataclasses
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 from ebpfn.config.pfn import PfnArchConfig, PfnTrainConfig
-from ebpfn.config.prior import HyperPriorConfig
 from ebpfn.data.types import CharacterizationShape
 from ebpfn.pfn.checkpoints import TABICL_V2_REGRESSOR, cache_dir
-from ebpfn.pfn.data import NanopriorTaskSource, PairedPriorTaskSource, PriorTaskSource
+from ebpfn.pfn.data import NanopriorTaskSource
 from ebpfn.pfn.quantile import QuantileDistribution
 from ebpfn.pfn.train import (
     MPS_MEMORY_FRACTION,
@@ -22,14 +20,12 @@ from ebpfn.pfn.train import (
     train_pfn,
     trainable_parameters,
 )
-from ebpfn.priors import build_hyperprior
 from ebpfn.priors.nanoprior import MechanismEta
 from ebpfn.utils import RandomStreams
 
 
 def _configs(steps: int) -> tuple[PfnArchConfig, PfnTrainConfig]:
     arch = PfnArchConfig(
-        n_bins=32,
         embed_dim=16,
         col_num_blocks=1,
         row_num_blocks=1,
@@ -88,7 +84,9 @@ def test_training_reduces_loss() -> None:
     arch, train = _configs(steps=60)
     _, result = train_pfn(arch, train, log_every=0)
     losses = np.asarray(result.losses)
-    assert losses[-10:].mean() < losses[:10].mean()
+    # Medians, not means: pinball loss scales with |y|, and the nanoprior emits occasional
+    # tasks whose standardized targets reach tens of sigma, so one draw swamps a mean.
+    assert np.median(losses[-10:]) < np.median(losses[:10])
     assert result.steps == 60
 
 
@@ -114,11 +112,7 @@ def test_checkpoints_are_step_specific_and_training_resumes_exactly(tmp_path: Pa
     _, uninterrupted_result = train_pfn(arch, full_train, log_every=0)
 
     first_train = full_train.model_copy(update={"steps": 2})
-    source = PairedPriorTaskSource(
-        build_hyperprior(first_train.prior),
-        RandomStreams(first_train.seed),
-        pairing_id="resume-test",
-    )
+    source = NanopriorTaskSource(RandomStreams(first_train.seed))
     _, first_result = train_pfn(arch, first_train, source=source, checkpoint_dir=tmp_path, log_every=0)
     assert first_result.checkpoint_path == tmp_path / "checkpoint_step_00000002.pt"
 
@@ -131,11 +125,11 @@ def test_checkpoints_are_step_specific_and_training_resumes_exactly(tmp_path: Pa
         log_every=0,
     )
 
-    paired_uninterrupted, paired_result = train_pfn(arch, full_train, source=source, log_every=0)
-    assert uninterrupted_result.steps == resumed_result.steps == paired_result.steps == 4
-    assert resumed_result.losses == paired_result.losses
+    shared_uninterrupted, shared_result = train_pfn(arch, full_train, source=source, log_every=0)
+    assert uninterrupted_result.steps == resumed_result.steps == shared_result.steps == 4
+    assert resumed_result.losses == shared_result.losses
     assert all(
-        torch.equal(resumed.state_dict()[name], value) for name, value in paired_uninterrupted.state_dict().items()
+        torch.equal(resumed.state_dict()[name], value) for name, value in shared_uninterrupted.state_dict().items()
     )
     assert {path.name for path in resumed_result.checkpoint_paths} == {
         "checkpoint_step_00000002.pt",
@@ -158,7 +152,7 @@ def test_gradient_accumulation_draws_each_microbatch_and_keeps_optimizer_step_co
     train = train.model_copy(update={"tasks_per_step": 1, "gradient_accumulation_steps": 3})
     batch_calls = 0
     optimizer_steps = 0
-    original_batch = PriorTaskSource.tensor_batch
+    original_batch = NanopriorTaskSource.tensor_batch
     original_step = torch.optim.AdamW.step
 
     def counting_batch(self, *args, **kwargs):
@@ -171,7 +165,7 @@ def test_gradient_accumulation_draws_each_microbatch_and_keeps_optimizer_step_co
         optimizer_steps += 1
         return original_step(self, closure)
 
-    monkeypatch.setattr(PriorTaskSource, "tensor_batch", counting_batch)
+    monkeypatch.setattr(NanopriorTaskSource, "tensor_batch", counting_batch)
     monkeypatch.setattr(torch.optim.AdamW, "step", counting_step)
 
     train_pfn(arch, train, log_every=0)
@@ -182,36 +176,33 @@ def test_gradient_accumulation_draws_each_microbatch_and_keeps_optimizer_step_co
 
 def test_custom_source_seed_must_match_training_seed() -> None:
     arch, train = _configs(steps=1)
-    source = PriorTaskSource(build_hyperprior(HyperPriorConfig()), RandomStreams(train.seed + 1))
+    source = NanopriorTaskSource(RandomStreams(train.seed + 1))
 
     with pytest.raises(ValueError, match="source seed"):
         train_pfn(arch, train, source=source, log_every=0)
 
 
-def test_baseline_and_tuned_sources_use_identical_fixed_borders() -> None:
+def test_baseline_and_tuned_sources_build_identical_heads() -> None:
     arch, train = _configs(steps=1)
-    baseline = PriorTaskSource(build_hyperprior(HyperPriorConfig()), RandomStreams(train.seed))
-    tuned = PriorTaskSource(
-        build_hyperprior(HyperPriorConfig(log_snr_mean=1.25, heavy_tail_rate=0.8)),
-        RandomStreams(train.seed),
-    )
+    baseline = NanopriorTaskSource(RandomStreams(train.seed))
+    tuned = NanopriorTaskSource(RandomStreams(train.seed), eta=MechanismEta(mechanism=(0.7, 0.1, 0.1, 0.1)))
 
     baseline_model, _ = train_pfn(arch, train, source=baseline, log_every=0)
     tuned_model, _ = train_pfn(arch, train, source=tuned, log_every=0)
-    assert torch.equal(baseline_model.distribution.borders, tuned_model.distribution.borders)
+    assert torch.equal(baseline_model.distribution.levels, tuned_model.distribution.levels)
 
 
 def test_checkpoint_records_exact_tuned_source_and_training_config(tmp_path: Path) -> None:
     arch, train = _configs(steps=1)
-    eta = build_hyperprior(HyperPriorConfig(log_snr_mean=1.25))
-    source = PriorTaskSource(eta, RandomStreams(train.seed))
+    eta = MechanismEta(mechanism=(0.1, 0.2, 0.6, 0.1))
+    source = NanopriorTaskSource(RandomStreams(train.seed), eta=eta)
 
     _, result = train_pfn(arch, train, source=source, checkpoint_dir=tmp_path, log_every=0)
     assert result.checkpoint_path is not None
     _, checkpoint = load_checkpoint(result.checkpoint_path)
 
     assert checkpoint["train"] == train.model_dump(mode="json")
-    assert checkpoint["source_eta"] == dataclasses.asdict(eta)
+    assert checkpoint["source_eta"] == eta.to_dict()
     assert checkpoint["source_seed"] == train.seed
     assert checkpoint["source_stream"] == source.stream_provenance
 
@@ -236,7 +227,7 @@ def _small_arch(**overrides) -> PfnArchConfig:
 )
 def test_finetune_scope_freezes_the_stages_outside_it(scope: str, learns_col: bool, learns_icl: bool) -> None:
     """The cost dial for the transfer objective: which backbone stage receives gradient."""
-    model = build_model(_small_arch(n_bins=32))
+    model = build_model(_small_arch(n_quantiles=32))
     trainable_parameters(model, scope)
 
     assert model.backbone.x_embed.weight.requires_grad is learns_col
@@ -247,7 +238,7 @@ def test_finetune_scope_freezes_the_stages_outside_it(scope: str, learns_col: bo
 
 def test_frozen_stages_are_withheld_from_the_optimizer() -> None:
     """Not just requires_grad: frozen tensors must accrue no weight decay or Adam state."""
-    model = build_model(_small_arch(n_bins=32))
+    model = build_model(_small_arch(n_quantiles=32))
     learning = trainable_parameters(model, "head")
     total = sum(parameter.numel() for parameter in model.parameters())
 
@@ -257,12 +248,12 @@ def test_frozen_stages_are_withheld_from_the_optimizer() -> None:
 
 def test_unknown_finetune_scope_is_rejected() -> None:
     with pytest.raises(ValueError, match="unknown finetune scope"):
-        trainable_parameters(build_model(_small_arch(n_bins=32)), "backbone")
+        trainable_parameters(build_model(_small_arch(n_quantiles=32)), "backbone")
 
 
 def test_quantile_head_round_trips_through_a_checkpoint(tmp_path: Path) -> None:
     """A quantile checkpoint stores no borders; reload must rebuild the head from arch."""
-    arch = _small_arch(head="quantile", n_quantiles=16)
+    arch = _small_arch(n_quantiles=16)
     train = PfnTrainConfig(
         steps=1,
         tasks_per_step=1,
@@ -278,7 +269,6 @@ def test_quantile_head_round_trips_through_a_checkpoint(tmp_path: Path) -> None:
     _, result = train_pfn(arch, train, source=source, checkpoint_dir=tmp_path)
 
     reloaded, checkpoint = load_checkpoint(result.checkpoint_path)
-    assert checkpoint["borders"] is None
     assert isinstance(reloaded.distribution, QuantileDistribution)
     assert reloaded.n_outputs == 16
     assert checkpoint["source_eta"] == MechanismEta().to_dict()
@@ -293,7 +283,6 @@ def test_released_base_exports_as_an_ordinary_checkpoint(tmp_path: Path) -> None
     path, arch = export_released_base(tmp_path, allow_download=False)
     model, checkpoint = load_checkpoint(path)
 
-    assert arch.head == "quantile"
     assert arch.n_outputs == 999
     assert checkpoint["step"] == 0
     assert checkpoint["losses"] == []

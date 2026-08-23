@@ -37,14 +37,13 @@ import numpy as np
 import polars as pl
 import torch
 from benchmarks.baselines import gaussian_nll, gp_fit_predict, rmse
-from benchmarks.diagnostics.reachability import DEFAULT_BASE
+from benchmarks.corpus import DEFAULT_BASE
 from benchmarks.studies.characterization import _load_openml_regression_dataset
 from ebpfn.config import PfnArchConfig, PfnTrainConfig, PreprocessingConfig
 from ebpfn.data import FeatureSchema, TaskPartition, TuningTask
 from ebpfn.data.preprocessing import fit_feature_transform
 from ebpfn.pfn.data import TaskBatch, collate_tasks
 from ebpfn.pfn.train import load_checkpoint, select_device, train_pfn
-from ebpfn.priors import hyperprior_from_dict
 from ebpfn.utils import RandomStreams
 
 OUT_DIR = Path("benchmarks/results/diagnostics/target_adapter")
@@ -124,21 +123,20 @@ class RealTaskSource:
     """Train source that resamples (support, query) in-context tasks from ONE target's
     ADAPT rows — the seam train_pfn drives to adapt the base on the target itself."""
 
-    def __init__(self, data: TargetData, n_query: int, seed: int, eta) -> None:
+    def __init__(self, data: TargetData, n_query: int, seed: int) -> None:
         self.data = data
         self.n_query = n_query
         self.names = list(data.schema.names)
         self.streams = RandomStreams(seed)
-        self.eta = eta  # base eta, provenance only — tasks come from the target, not this eta
 
     @property
-    def stream_provenance(self) -> dict[str, str | int | bool | None]:
-        return {
-            "version": "real-adapt-task-source-1",
-            "base_seed": self.streams.base_seed,
-            "common_random_numbers": False,
-            "pairing_id": None,
-        }
+    def stream_provenance(self) -> dict[str, str | int]:
+        return {"version": "real-adapt-task-source-2", "base_seed": self.streams.base_seed}
+
+    @property
+    def eta_payload(self) -> dict | None:
+        """No generating prior: the tasks are resampled from the target's own rows."""
+        return None
 
     def _task(self, rng: np.random.Generator) -> TuningTask:
         d = self.data
@@ -244,11 +242,11 @@ def adapt_one(name: str, checkpoint: Path, steps: int, gp_max: int, seed: int) -
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     for stale in ckpt_dir.glob("checkpoint_step_*.pt"):  # fresh run per invocation (seed/steps may change)
         stale.unlink()
-    source = RealTaskSource(data, n_query, seed, hyperprior_from_dict(ck["source_eta"]))
+    source = RealTaskSource(data, n_query, seed)
     train_pfn(
         arch,
         train,
-        source=source,  # ty:ignore[invalid-argument-type]
+        source=source,
         checkpoint_dir=ckpt_dir,
         init_weights_from=checkpoint,
         log_every=max(1, steps // 5),

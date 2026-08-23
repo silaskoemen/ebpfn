@@ -3,9 +3,7 @@ defaults:
   - pfn_mode: fast
 
 arch:
-  n_bins: 256
-  target_inner_bound: 5.0
-  target_tail_scale: 1.0
+  n_quantiles: 999
   embed_dim: 128
   col_num_blocks: 3
   row_num_blocks: 3

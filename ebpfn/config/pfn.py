@@ -1,9 +1,8 @@
 """Strict configuration for PFN architecture, training, and the feasibility study.
 
-Unlike the tuning configs, these do carry model settings: they are the run state for
-training a regression PFN on ebpfn's prior. The architecture config is deliberately
-separable from training so the same architecture can be profiled or trained under
-different schedules.
+These carry model settings: they are the run state for training a regression PFN on
+the nanoprior. The architecture config is deliberately separable from training so the
+same architecture can be profiled or trained under different schedules.
 """
 
 from typing import Literal
@@ -11,7 +10,60 @@ from typing import Literal
 from pydantic import field_validator, model_validator
 
 from ebpfn.config.base import StrictConfigModel
-from ebpfn.config.prior import HyperPriorConfig, ShapeJitterConfig
+
+
+class NanopriorConfig(StrictConfigModel):
+    """The mechanism mixture the PFN trains against.
+
+    An unset role stays at upstream's own mixture, which is what the released checkpoint
+    was pretrained on, so a run left at the defaults is the null arm. The origin is not
+    written out here: ``MechanismEta`` owns it, and the config layer must not import the
+    generator. This checks only that a supplied mixture is a probability vector; whether
+    it is a valid one for the current grouping is ``MechanismEta``'s to enforce.
+    ``max_attempts`` bounds the learnability rejection loop, which corner mixtures can
+    drive long.
+    """
+
+    mechanism: tuple[float, ...] | None = None
+    root: tuple[float, ...] | None = None
+    max_attempts: int | None = None
+
+    @field_validator("mechanism", "root", mode="before")
+    @classmethod
+    def freeze_weights(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "NanopriorConfig":
+        for role, weights in (("mechanism", self.mechanism), ("root", self.root)):
+            if weights is None:
+                continue
+            if any(weight < 0.0 for weight in weights) or abs(sum(weights) - 1.0) > 1e-6:
+                raise ValueError(f"{role} weights must be nonnegative and sum to one")
+        if self.max_attempts is not None and self.max_attempts < 1:
+            raise ValueError("max_attempts must be positive when set")
+        return self
+
+
+class ShapeJitterConfig(StrictConfigModel):
+    sigma_n: float = 0.4
+    sigma_p: float = 0.2
+    n_min: int = 32
+    n_max: int = 1024
+    p_min: int = 1
+    p_max: int = 100
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "ShapeJitterConfig":
+        if self.sigma_n <= 0.0 or self.sigma_p <= 0.0:
+            raise ValueError("shape jitter widths must be positive")
+        if self.sigma_p >= self.sigma_n:
+            raise ValueError("sigma_p must be smaller than sigma_n")
+        if not 2 <= self.n_min <= self.n_max:
+            raise ValueError("row bounds must satisfy 2 <= n_min <= n_max")
+        if not 1 <= self.p_min <= self.p_max <= 100:
+            raise ValueError("feature bounds must satisfy 1 <= p_min <= p_max <= 100")
+        return self
 
 
 class PfnArchConfig(StrictConfigModel):
@@ -23,19 +75,15 @@ class PfnArchConfig(StrictConfigModel):
     training context in rows; it is provenance for the feasibility profile, not a
     runtime cap.
 
-    ``head`` selects what the ``n_outputs`` backbone outputs mean. ``"bar"`` is ebpfn's
-    own bar distribution: two bins are full-support half-normal tails beginning at
-    ``+-target_inner_bound`` with scale ``target_tail_scale`` and the rest uniformly
-    partition the interior. ``"quantile"`` is the released TabICLv2 regression head,
-    ``n_quantiles`` values on upstream's interior level grid; the defaults here match
-    the released checkpoint so a fine-tune from it needs no overrides.
+    The head is the released TabICLv2 regression head: ``n_quantiles`` values on
+    upstream's interior level grid. The defaults here match the released checkpoint, so a
+    fine-tune from it needs no overrides. A fixed-border bar head was the alternative and
+    is retired: the nanoprior's collapse-induced targets reach past any fixed interior
+    (32% of batches exceed +-5 standardized), which a pinball loss absorbs and a binned
+    density does not.
     """
 
-    head: Literal["bar", "quantile"] = "bar"
-    n_bins: int = 256
     n_quantiles: int = 999
-    target_inner_bound: float = 5.0
-    target_tail_scale: float = 1.0
     embed_dim: int = 128
     col_num_blocks: int = 3
     row_num_blocks: int = 3
@@ -50,17 +98,13 @@ class PfnArchConfig(StrictConfigModel):
 
     @property
     def n_outputs(self) -> int:
-        """Width the backbone must emit for the selected head."""
-        return self.n_bins if self.head == "bar" else self.n_quantiles
+        """Width the backbone must emit for the head."""
+        return self.n_quantiles
 
     @model_validator(mode="after")
     def validate_values(self) -> "PfnArchConfig":
-        if self.n_bins < 3:
-            raise ValueError("n_bins must provide two tail bins and at least one interior bin")
         if self.n_quantiles < 2:
             raise ValueError("n_quantiles must be at least two")
-        if self.target_inner_bound <= 0.0 or self.target_tail_scale <= 0.0:
-            raise ValueError("target inner bound and tail scale must be positive")
         positive = (
             self.embed_dim,
             self.col_num_blocks,
@@ -115,7 +159,7 @@ class PfnTrainConfig(StrictConfigModel):
     anchor_probe_score: int = 128
     anchor_features: int = 100
     jitter: ShapeJitterConfig = ShapeJitterConfig()
-    prior: HyperPriorConfig = HyperPriorConfig()
+    prior: NanopriorConfig = NanopriorConfig()
 
     @model_validator(mode="after")
     def validate_values(self) -> "PfnTrainConfig":

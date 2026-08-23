@@ -18,6 +18,7 @@ from ebpfn.config.pfn import PfnArchConfig, PfnStudyModeConfig, PfnTrainConfig
 from ebpfn.data.types import CharacterizationShape
 from ebpfn.pfn.data import TaskBatch, TaskSource
 from ebpfn.pfn.model import EBPFNModel
+from ebpfn.pfn.shapes import sample_training_shape
 from ebpfn.pfn.train import (
     anchor_shape,
     build_model,
@@ -26,7 +27,6 @@ from ebpfn.pfn.train import (
     release_device_cache,
     select_device,
 )
-from ebpfn.priors.shapes import sample_training_shape
 from ebpfn.utils import RandomRole, RandomStreams
 
 

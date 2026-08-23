@@ -24,5 +24,6 @@ Comparisons and ablations join `studies/`/`diagnostics/` as siblings when they a
 | Command | Module |
 |---|---|
 | `pixi run characterize` | `benchmarks/studies/characterize.py` — Step 2 characterization study (`characterization_mode=audit` for the evidence gate) |
-| `pixi run prior-audit` | `benchmarks/studies/prior.py` — Step 3 prior p-complexity + reproducibility audit (`prior_mode=audit` for the denser grid; joint-Sobol identifiability is deferred to Step 4) |
-| `pixi run python -m benchmarks.studies.tuning` | Step 4 planted/null recovery matrix (`tuning_mode=audit` for the full cloud-size and D3 grid) |
+| `pixi run python -m benchmarks.diagnostics.headroom` | Reducible-vs-aleatoric headroom on the corpus: base PFN vs GP vs CatBoost on the same splits |
+| `pixi run python -m benchmarks.diagnostics.target_adapter` | Direct-target-adapter upper bound: adapt the base on each target's own rows and compare to a same-data GP |
+| `pixi run python -m benchmarks.diagnostics.feature_probe` | Frozen-feature probe: how much of the base's loss is readout rather than representation |

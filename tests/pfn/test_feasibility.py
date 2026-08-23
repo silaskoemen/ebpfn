@@ -1,12 +1,11 @@
 import torch
 from ebpfn.config.pfn import PfnArchConfig, PfnStudyModeConfig, PfnTrainConfig
-from ebpfn.pfn.data import PriorTaskSource
+from ebpfn.pfn.data import NanopriorTaskSource
 from ebpfn.pfn.feasibility import profile
 
 
 def test_profile_returns_well_formed_report() -> None:
     arch = PfnArchConfig(
-        n_bins=32,
         embed_dim=16,
         col_num_blocks=1,
         row_num_blocks=1,
@@ -48,7 +47,6 @@ def test_profile_executes_optimizer_steps(monkeypatch) -> None:
 
     monkeypatch.setattr(torch.optim.AdamW, "step", counting_step)
     arch = PfnArchConfig(
-        n_bins=16,
         embed_dim=8,
         col_num_blocks=1,
         row_num_blocks=1,
@@ -69,7 +67,6 @@ def test_profile_executes_optimizer_steps(monkeypatch) -> None:
 
 def test_profile_rejects_anchor_beyond_max_context() -> None:
     arch = PfnArchConfig(
-        n_bins=16,
         embed_dim=8,
         col_num_blocks=1,
         row_num_blocks=1,
@@ -96,7 +93,6 @@ def test_profile_rejects_anchor_beyond_max_context() -> None:
 
 def test_profile_rejects_jitter_range_beyond_max_context() -> None:
     arch = PfnArchConfig(
-        n_bins=16,
         embed_dim=8,
         col_num_blocks=1,
         row_num_blocks=1,
@@ -125,9 +121,8 @@ def test_profile_retains_out_of_memory_as_a_cell_outcome(monkeypatch) -> None:
     def out_of_memory(*args, **kwargs):
         raise torch.OutOfMemoryError("test out of memory")
 
-    monkeypatch.setattr(PriorTaskSource, "tensor_batch", out_of_memory)
+    monkeypatch.setattr(NanopriorTaskSource, "tensor_batch", out_of_memory)
     arch = PfnArchConfig(
-        n_bins=16,
         embed_dim=8,
         col_num_blocks=1,
         row_num_blocks=1,

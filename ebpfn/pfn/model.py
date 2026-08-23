@@ -1,9 +1,8 @@
 """``EBPFNModel``: the vendored TabICLv2 backbone plus a pluggable predictive head.
 
-Both parts are injected rather than constructed here, because the two bases we train
-from differ in both: a fresh backbone with a :class:`BarDistribution` over ``n_bins``,
-or released TabICLv2 weights with a :class:`QuantileDistribution` over 999 levels. The
-model is config-agnostic; config bridging lives in ``train.py``.
+Both parts are injected rather than constructed here, so a fresh backbone and released
+TabICLv2 weights assemble the same way and a head can be swapped without touching the
+model. The model is config-agnostic; config bridging lives in ``train.py``.
 """
 
 import torch

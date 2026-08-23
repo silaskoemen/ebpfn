@@ -1,5 +1,6 @@
 """Plots for the V2 diagnostics (see ``PLAN.md``), rendered from the persisted
-artifacts of ``reachability.py`` and ``controllability.py`` -- no model needed.
+committed E1/E2 artifacts of the retired reachability and controllability
+diagnostics -- no model and no generator needed.
 
     pixi run python -m benchmarks.diagnostics.plots [--which reachability|controllability|all]
 

@@ -8,7 +8,7 @@ does not jitter (it matches the real shape exactly).
 
 import numpy as np
 
-from ebpfn.config.prior import ShapeJitterConfig
+from ebpfn.config.pfn import ShapeJitterConfig
 from ebpfn.data import CharacterizationShape
 
 
