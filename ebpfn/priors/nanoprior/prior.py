@@ -111,11 +111,13 @@ def randlognum(low: float, high: float, site: str | None = None) -> float:
 
 
 def randlogint(low: float, high: float, site: str | None = None) -> int:
-    # ebpfn: resolved here rather than passed down, so the clip uses the reparameterized
-    # bounds and the interval is not shifted twice.
+    # ebpfn: resolved here rather than passed down, so the interval is not shifted twice.
+    # Upstream's low is a structural floor (a tree count or a width below it crashes the
+    # mechanism), so a downward shift piles mass on it rather than crossing it.
+    floor = low
     if site is not None:
         low, high = resolve(site, low, high)
-    return int(np.clip(np.floor(randlognum(low, high)).astype(int), low, high - 1))
+    return int(np.clip(np.floor(randlognum(low, high)).astype(int), floor, max(floor, high - 1)))
 
 
 def randbool() -> bool:

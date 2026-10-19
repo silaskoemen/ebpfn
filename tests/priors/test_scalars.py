@@ -7,6 +7,7 @@ import pytest
 from ebpfn.data.types import CharacterizationShape
 from ebpfn.priors.nanoprior import ORIGIN_ETA, REACHABLE_SITES, SITE_NAMES, PriorEta, sample_task
 from ebpfn.priors.nanoprior.eta import ETA_VERSION
+from ebpfn.priors.nanoprior.prior import randlogint
 from ebpfn.priors.nanoprior.scalars import (
     BY_NAME,
     ORIGIN_COORD,
@@ -123,6 +124,22 @@ def test_a_fully_lifted_origin_eta_is_bit_identical_to_an_unlifted_one() -> None
         np.testing.assert_array_equal(plain.probe_fit.X.to_numpy(), same.probe_fit.X.to_numpy())
         np.testing.assert_array_equal(plain.probe_fit.y, same.probe_fit.y)
         np.testing.assert_array_equal(plain.probe_score.y, same.probe_score.y)
+
+
+def test_integer_sites_never_fall_below_upstreams_floor() -> None:
+    """A downward shift piles mass on the structural minimum instead of emitting zero trees."""
+    with active_scalars({"z.tree.n_trees": (0.0, 1.0)}):
+        draws = [randlogint(1, 128, "z.tree.n_trees") for _ in range(200)]
+    assert min(draws) == 1
+
+
+@pytest.mark.parametrize("coordinates", [(0.0, 0.5), (0.0, 0.0), (0.5, 1.0)])
+def test_the_whole_cube_corner_generates(coordinates: tuple[float, float]) -> None:
+    """Total at the interval level is not enough: the mechanisms must accept what it yields."""
+    eta = PriorEta(scalars=dict.fromkeys((site.name for site in REACHABLE_SITES), coordinates))
+    streams = RandomStreams(base_seed=0)
+    for index in range(6):
+        sample_task(_shape(), streams, "corner", index, eta=eta, max_attempts=50)
 
 
 @pytest.mark.parametrize("site", ["z.weights.decay", "z.graph.n_nodes", "g.column.kumaraswamy_shape"])
