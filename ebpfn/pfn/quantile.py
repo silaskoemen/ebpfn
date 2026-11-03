@@ -135,6 +135,22 @@ class QuantileDistribution(nn.Module):
         """Negative log-density. Reported, not trained on — see :meth:`pinball`."""
         return -self.log_prob(values, y)
 
+    def coarse_nll(self, values: Tensor, y: Tensor, *, stride: int) -> Tensor:
+        """NLL through every ``stride``-th knot, centred so both tails keep their reach.
+
+        The interior density is ``dalpha / dq`` between adjacent knots, so small jitter
+        in the spacing of neighbouring quantiles -- which pinball loss barely penalizes --
+        inflates :meth:`nll` while the distribution itself has hardly moved. Reading the
+        density off a coarser knot grid averages that jitter out.
+        """
+        if stride < 1:
+            raise ValueError("stride must be positive")
+        start = ((self.n_outputs - 1) % stride) // 2
+        index = torch.arange(start, self.n_outputs, stride, device=self.levels.device)
+        if index.numel() < 2:
+            raise ValueError(f"stride {stride} leaves fewer than two of {self.n_outputs} knots")
+        return QuantileDistribution(self.levels[index]).nll(self._flat(values)[:, index], y)
+
     def icdf(self, values: Tensor, q: float) -> Tensor:
         """Quantile at a scalar level ``q`` in (0, 1)."""
         if not 0.0 < q < 1.0:

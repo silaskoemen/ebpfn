@@ -51,6 +51,7 @@ def test_aggregate_metrics_reproduce_from_row_contributions() -> None:
     aggregate = compute_metrics(distribution, logits, y, crps_grid_size=64)
 
     assert aggregate.nll == pytest.approx(float(rows.nll.mean()))
+    assert aggregate.nll_coarse == pytest.approx(float(rows.nll_coarse.mean()))
     assert aggregate.crps == pytest.approx(float(rows.crps.mean()))
     assert aggregate.mae == pytest.approx(float(rows.absolute_error.mean()))
     assert aggregate.rmse == pytest.approx(float(torch.sqrt(rows.squared_error.mean())))

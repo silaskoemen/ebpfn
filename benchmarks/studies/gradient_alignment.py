@@ -67,7 +67,7 @@ class Target:
     held: TaskBatch
 
 
-def _query_subset(batch: TaskBatch, index: np.ndarray) -> TaskBatch:
+def query_subset(batch: TaskBatch, index: np.ndarray) -> TaskBatch:
     rows = torch.as_tensor(index)
     return dataclasses.replace(
         batch,
@@ -88,11 +88,11 @@ def load_targets() -> list[Target]:
         shape = CharacterizationShape(
             task.probe_fit.X.height, task.probe_score.X.height, task.probe_fit.X.width, 0, "regression"
         )
-        targets.append(Target(name, shape, _query_subset(batch, order[:half]), _query_subset(batch, order[half:])))
+        targets.append(Target(name, shape, query_subset(batch, order[:half]), query_subset(batch, order[half:])))
     return targets
 
 
-def _flat_grad(model: EBPFNModel, params: list[torch.nn.Parameter], batch: TaskBatch) -> torch.Tensor:
+def flat_grad(model: EBPFNModel, params: list[torch.nn.Parameter], batch: TaskBatch) -> torch.Tensor:
     model.zero_grad(set_to_none=True)
     model.loss(batch).backward()
     grads = [p.grad for p in params]
@@ -133,7 +133,7 @@ def run_target(
     second = torch.zeros_like(reference[0])
     generic = torch.zeros_like(second)
     for task in _tasks(source, N_PRECONDITION, target.shape, "precondition", target.name):
-        g = _flat_grad(model, params, collate_tasks([task]).to(device))
+        g = flat_grad(model, params, collate_tasks([task]).to(device))
         second += g**2 / N_PRECONDITION
         generic += g / N_PRECONDITION
     names = [t.name for t in targets]
@@ -152,7 +152,7 @@ def run_target(
     base_v, base_prior = _loss(model, held), prior_loss()
     rows = []
     for index, task in enumerate(_tasks(source, n_candidates, target.shape, "candidate", target.name)):
-        g = _flat_grad(model, params, collate_tasks([task]).to(device))
+        g = flat_grad(model, params, collate_tasks([task]).to(device))
         update = g / (torch.sqrt(BETA2 * second + (1 - BETA2) * g**2) + ADAM_EPS)
         dots = torch.cat([reference @ update, (generic @ update)[None]]).cpu().numpy()
         row = {"target": target.name, "candidate": index, "grad_norm": float(g.norm())}
@@ -238,7 +238,7 @@ def main() -> None:
     )
 
     targets = load_targets()
-    reference = torch.stack([_flat_grad(model, params, t.align.to(device)) for t in targets])
+    reference = torch.stack([flat_grad(model, params, t.align.to(device)) for t in targets])
     source = NanopriorTaskSource(RandomStreams(SEED), max_attempts=MAX_ATTEMPTS)
     frames = []
     for target in targets:

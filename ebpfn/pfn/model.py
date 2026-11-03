@@ -36,7 +36,9 @@ class EBPFNModel(nn.Module):
     def n_outputs(self) -> int:
         return self.distribution.n_outputs
 
-    def forward(self, x: Tensor, y_train: Tensor, return_embedding: bool = False) -> Tensor:
+    def forward(
+        self, x: Tensor, y_train: Tensor, return_embedding: bool = False, row_chunk: int | None = None
+    ) -> Tensor:
         """Head outputs for the test rows: ``(B, n_test, n_outputs)``.
 
         ``x`` is ``(B, n_rows, n_cols)`` with the ``n_train`` context rows first;
@@ -44,9 +46,10 @@ class EBPFNModel(nn.Module):
 
         With ``return_embedding=True`` returns the in-context embedding instead —
         the normalized pre-head representation ``(B, n_test, icl_dim)`` used as the
-        characterization ``z`` for prior tuning (see ``PLAN.md``).
+        characterization ``z`` for prior tuning (see ``PLAN.md``). ``row_chunk`` bounds the
+        row stage's memory without changing the output.
         """
-        return self.backbone(x, y_train, return_embedding=return_embedding)
+        return self.backbone(x, y_train, return_embedding=return_embedding, row_chunk=row_chunk)
 
     def loss(self, batch: TaskBatch) -> Tensor:
         """Mean of the head's native training loss on the query targets."""

@@ -99,6 +99,8 @@ assets/*.pt
 !benchmarks/results/raw/.gitkeep
 **/data.npy
 **/*.npz
+# Corpus slices: rebuilt by benchmarks.data.regression_corpus; manifest.json stays tracked
+data/**/*.parquet
 examples/m5/*
 
 # Debug files

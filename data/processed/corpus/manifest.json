@@ -1,0 +1,805 @@
+{
+ "tabarena/airfoil_self_noise": {
+  "task_id": 363612,
+  "dataset_id": 46904,
+  "n_total": 1503,
+  "n_categorical": 1,
+  "rows": 1503,
+  "features": 5
+ },
+ "tabarena/Another-Dataset-on-used-Fiat-500": {
+  "task_id": 363615,
+  "dataset_id": 46907,
+  "n_total": 1538,
+  "n_categorical": 1,
+  "rows": 1538,
+  "features": 7
+ },
+ "tabarena/concrete_compressive_strength": {
+  "task_id": 363625,
+  "dataset_id": 46917,
+  "n_total": 1030,
+  "n_categorical": 0,
+  "rows": 1030,
+  "features": 8
+ },
+ "tabarena/diamonds": {
+  "task_id": 363631,
+  "dataset_id": 46923,
+  "n_total": 53940,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 9
+ },
+ "tabarena/Food_Delivery_Time": {
+  "task_id": 363672,
+  "dataset_id": 46928,
+  "n_total": 45451,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 9
+ },
+ "tabarena/healthcare_insurance_expenses": {
+  "task_id": 363675,
+  "dataset_id": 46931,
+  "n_total": 1338,
+  "n_categorical": 3,
+  "rows": 1338,
+  "features": 6
+ },
+ "tabarena/houses": {
+  "task_id": 363678,
+  "dataset_id": 46934,
+  "n_total": 20640,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "tabarena/miami_housing": {
+  "task_id": 363686,
+  "dataset_id": 46942,
+  "n_total": 13776,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 15
+ },
+ "tabarena/physiochemical_protein": {
+  "task_id": 363693,
+  "dataset_id": 46949,
+  "n_total": 45730,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 9
+ },
+ "tabarena/QSAR-TID-11": {
+  "task_id": 363697,
+  "dataset_id": 46953,
+  "n_total": 5742,
+  "n_categorical": 0,
+  "skipped": "1024 features, 5742 rows"
+ },
+ "tabarena/QSAR_fish_toxicity": {
+  "task_id": 363698,
+  "dataset_id": 46954,
+  "n_total": 907,
+  "n_categorical": 0,
+  "rows": 907,
+  "features": 6
+ },
+ "tabarena/superconductivity": {
+  "task_id": 363705,
+  "dataset_id": 46961,
+  "n_total": 21263,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 81
+ },
+ "tabarena/wine_quality": {
+  "task_id": 363708,
+  "dataset_id": 46964,
+  "n_total": 6497,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 12
+ },
+ "talent/1000-Cameras-Dataset": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43714&sort=runs",
+  "n_total": 1038,
+  "n_categorical": 0,
+  "rows": 1038,
+  "features": 10
+ },
+ "talent/2dplanes": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=215&sort=runs",
+  "n_total": 40768,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/3D_Estimation_using_RSSI_of_WLAN_dataset": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=45718&sort=runs",
+  "n_total": 5760,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/3D_Estimation_using_RSSI_of_WLAN_dataset_complete_1_target": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=45720&sort=runs",
+  "n_total": 14400,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 12
+ },
+ "talent/Abalone_reg": {
+  "source_url": "https://archive.ics.uci.edu/dataset/1/abalone",
+  "n_total": 4177,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/Ailerons": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=296&sort=runs",
+  "n_total": 13750,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 40
+ },
+ "talent/Another-Dataset-on-used-Fiat-500-(1538-rows)": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43828&sort=runs",
+  "n_total": 1538,
+  "n_categorical": 0,
+  "rows": 1538,
+  "features": 6
+ },
+ "talent/BNG(echoMonths)": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=1199&sort=runs",
+  "n_total": 17496,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/BNG(lowbwt)": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=1193&sort=runs",
+  "n_total": 31104,
+  "n_categorical": 7,
+  "rows": 2048,
+  "features": 9
+ },
+ "talent/BNG(mv)": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=1213&sort=runs",
+  "n_total": 78732,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/BNG(stock)": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=1200&sort=runs",
+  "n_total": 59049,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 9
+ },
+ "talent/Bias_correction_r": {
+  "source_url": "https://archive.ics.uci.edu/dataset/514/bias+correction+of+numerical+prediction+model+temperature+forecast",
+  "n_total": 7725,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 21
+ },
+ "talent/Bias_correction_r_2": {
+  "source_url": "https://archive.ics.uci.edu/dataset/514/bias+correction+of+numerical+prediction+model+temperature+forecast",
+  "n_total": 7725,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 21
+ },
+ "talent/Brazilian_houses_reproduced": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=44152&sort=runs",
+  "n_total": 10692,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/CPMP-2015-regression": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=41700&sort=runs",
+  "n_total": 2108,
+  "n_categorical": 2,
+  "rows": 2048,
+  "features": 25
+ },
+ "talent/CPS1988": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43963&sort=runs",
+  "n_total": 28155,
+  "n_categorical": 4,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/CookbookReviews": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=45744&sort=runs",
+  "n_total": 18182,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 7
+ },
+ "talent/Data_Science_Salaries": {
+  "source_url": "https://www.kaggle.com/datasets/arnabchaki/data-science-salaries-2023/data",
+  "n_total": 3755,
+  "n_categorical": 4,
+  "rows": 2048,
+  "features": 5
+ },
+ "talent/Diamonds": {
+  "source_url": "https://www.kaggle.com/datasets/joebeachcapital/diamonds",
+  "n_total": 53940,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 9
+ },
+ "talent/Facebook_Comment_Volume": {
+  "source_url": "https://archive.ics.uci.edu/dataset/363/facebook+comment+volume+dataset",
+  "n_total": 40949,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 53
+ },
+ "talent/Food_Delivery_Time": {
+  "source_url": "https://www.kaggle.com/datasets/rajatkumar30/food-delivery-time",
+  "n_total": 45593,
+  "n_categorical": 2,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/Goodreads-Computer-Books": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43785&sort=runs",
+  "n_total": 1234,
+  "n_categorical": 0,
+  "rows": 1234,
+  "features": 5
+ },
+ "talent/IEEE80211aa-GATS": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43180&sort=runs",
+  "n_total": 4046,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 27
+ },
+ "talent/Job_Profitability": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=44311&sort=runs",
+  "n_total": 14480,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 28
+ },
+ "talent/Kaggle_bike_sharing_demand_challange": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=1414&sort=runs",
+  "n_total": 10886,
+  "n_categorical": 6,
+  "rows": 2048,
+  "features": 9
+ },
+ "talent/Laptop_Prices_Dataset": {
+  "source_url": "https://www.kaggle.com/datasets/talhabarkaatahmad/laptop-prices-dataset-october-2023",
+  "n_total": 4441,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/Large-scale_Wave_Energy_Farm_Perth_100": {
+  "source_url": "https://archive.ics.uci.edu/dataset/882/large-scale+wave+energy+farm",
+  "n_total": 7277,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 201
+ },
+ "talent/Large-scale_Wave_Energy_Farm_Sydney_100": {
+  "source_url": "https://archive.ics.uci.edu/dataset/882/large-scale+wave+energy+farm",
+  "n_total": 2318,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 201
+ },
+ "talent/Large-scale_Wave_Energy_Farm_Sydney_49": {
+  "source_url": "https://archive.ics.uci.edu/dataset/882/large-scale+wave+energy+farm",
+  "n_total": 17964,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 99
+ },
+ "talent/MIP-2016-regression": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&id=43071",
+  "n_total": 1090,
+  "n_categorical": 1,
+  "rows": 1090,
+  "features": 144
+ },
+ "talent/MiamiHousing2016": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43093&sort=runs",
+  "n_total": 13932,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 16
+ },
+ "talent/Mobile_Phone_Market_in_Ghana": {
+  "source_url": "https://www.kaggle.com/datasets/redpen12/mobile-phone-market-in-ghana",
+  "n_total": 3600,
+  "n_categorical": 10,
+  "rows": 2048,
+  "features": 14
+ },
+ "talent/Moneyball": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=41021",
+  "n_total": 1232,
+  "n_categorical": 6,
+  "rows": 1232,
+  "features": 14
+ },
+ "talent/NASA_PHM2008": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&sort=runs&order=desc&qualities.NumberOfClasses=lte_1&id=42821",
+  "n_total": 45918,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 21
+ },
+ "talent/NHANES_age_prediction": {
+  "source_url": "https://archive.ics.uci.edu/dataset/887/national+health+and+nutrition+health+survey+2013-2014+(nhanes)+age+prediction+subset",
+  "n_total": 2277,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 7
+ },
+ "talent/OnlineNewsPopularity": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=4545",
+  "n_total": 39644,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 59
+ },
+ "talent/Parkinson_Multiple_Sound_Recording": {
+  "source_url": "https://archive.ics.uci.edu/dataset/301/parkinson+speech+dataset+with+multiple+types+of+sound+recordings",
+  "n_total": 1040,
+  "n_categorical": 0,
+  "rows": 1040,
+  "features": 26
+ },
+ "talent/Parkinsons_Telemonitoring": {
+  "source_url": "https://archive.ics.uci.edu/dataset/189/parkinsons+telemonitoring",
+  "n_total": 5875,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 19
+ },
+ "talent/Physicochemical_r": {
+  "source_url": "https://archive.ics.uci.edu/dataset/265/physicochemical+properties+of+protein+tertiary+structure",
+  "n_total": 45730,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 9
+ },
+ "talent/SAT11-HAND-runtime-regression": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&id=41980",
+  "n_total": 4440,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 116
+ },
+ "talent/Shop_Customer_Data": {
+  "source_url": "https://www.kaggle.com/datasets/datascientistanna/customers-dataset",
+  "n_total": 2000,
+  "n_categorical": 2,
+  "rows": 2000,
+  "features": 6
+ },
+ "talent/Superconductivty": {
+  "source_url": "https://archive.ics.uci.edu/dataset/464/superconductivty+data",
+  "n_total": 21197,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 81
+ },
+ "talent/Wine_Quality_red": {
+  "source_url": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+  "n_total": 1599,
+  "n_categorical": 0,
+  "rows": 1599,
+  "features": 11
+ },
+ "talent/Wine_Quality_white": {
+  "source_url": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+  "n_total": 4898,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 11
+ },
+ "talent/airfoil_self_noise": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43919&sort=runs",
+  "n_total": 1503,
+  "n_categorical": 0,
+  "rows": 1503,
+  "features": 5
+ },
+ "talent/analcatdata_supreme": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=504&sort=runs",
+  "n_total": 4052,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 7
+ },
+ "talent/archive2": {
+  "source_url": "https://www.kaggle.com/datasets/yasserh/wine-quality-dataset",
+  "n_total": 1143,
+  "n_categorical": 1,
+  "rows": 1143,
+  "features": 12
+ },
+ "talent/archive_r56_Portuguese": {
+  "source_url": "https://www.kaggle.com/datasets/whenamancodes/student-performance/data",
+  "n_total": 651,
+  "n_categorical": 29,
+  "rows": 651,
+  "features": 30
+ },
+ "talent/auction_verification": {
+  "source_url": "https://archive.ics.uci.edu/dataset/713/auction+verification",
+  "n_total": 2043,
+  "n_categorical": 1,
+  "rows": 2043,
+  "features": 7
+ },
+ "talent/avocado_sales": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=43927&sort=runs",
+  "n_total": 18249,
+  "n_categorical": 2,
+  "rows": 2048,
+  "features": 13
+ },
+ "talent/bank32nh": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=558&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 32
+ },
+ "talent/bank8FM": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=572&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/boston": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=531",
+  "n_total": 506,
+  "n_categorical": 2,
+  "rows": 506,
+  "features": 13
+ },
+ "talent/chscase_foot": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=703",
+  "n_total": 526,
+  "n_categorical": 2,
+  "rows": 526,
+  "features": 5
+ },
+ "talent/colleges": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42727",
+  "n_total": 7063,
+  "n_categorical": 12,
+  "rows": 2048,
+  "features": 44
+ },
+ "talent/combined_cycle_power_plant": {
+  "source_url": "https://archive.ics.uci.edu/dataset/294/combined+cycle+power+plant",
+  "n_total": 9568,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 4
+ },
+ "talent/communities_and_crime": {
+  "source_url": "https://archive.ics.uci.edu/dataset/183/communities+and+crime",
+  "n_total": 1994,
+  "n_categorical": 0,
+  "rows": 1994,
+  "features": 102
+ },
+ "talent/concrete_compressive_strength": {
+  "source_url": "https://archive.ics.uci.edu/dataset/165/concrete+compressive+strength",
+  "n_total": 1030,
+  "n_categorical": 0,
+  "rows": 1030,
+  "features": 8
+ },
+ "talent/cpu_act": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=197&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 21
+ },
+ "talent/cpu_small": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=562&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 12
+ },
+ "talent/dataset_sales": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42183&sort=runs",
+  "n_total": 10738,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/debutanizer": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=23516&sort=runs",
+  "n_total": 2394,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 7
+ },
+ "talent/delta_elevators": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=198&sort=runs",
+  "n_total": 9517,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/elevators": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=216&sort=runs",
+  "n_total": 16599,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 18
+ },
+ "talent/fifa": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=44026&sort=runs",
+  "n_total": 18063,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 5
+ },
+ "talent/fried": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=564&sort=runs",
+  "n_total": 40768,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/garments_worker_productivity": {
+  "source_url": "https://archive.ics.uci.edu/dataset/597/productivity+prediction+of+garment+employees",
+  "n_total": 1197,
+  "n_categorical": 5,
+  "rows": 1197,
+  "features": 13
+ },
+ "talent/gas_turbine_CO_and_NOx_emission": {
+  "source_url": "https://archive.ics.uci.edu/dataset/551/gas+turbine+co+and+nox+emission+data+set",
+  "n_total": 36733,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/healthcare_insurance_expenses": {
+  "source_url": "https://www.kaggle.com/datasets/arunjangir245/healthcare-insurance-expenses/",
+  "n_total": 1338,
+  "n_categorical": 3,
+  "rows": 1338,
+  "features": 6
+ },
+ "talent/house_16H_reg": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=574&sort=runs",
+  "n_total": 22784,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 16
+ },
+ "talent/house_8L": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=218&sort=runs",
+  "n_total": 22784,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/house_prices_nominal": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&id=42563",
+  "n_total": 1460,
+  "n_categorical": 43,
+  "rows": 1460,
+  "features": 79
+ },
+ "talent/house_sales_reduced": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42635&sort=runs",
+  "n_total": 21613,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 18
+ },
+ "talent/houses": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=537&sort=runs",
+  "n_total": 20640,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/housing_price_prediction": {
+  "source_url": "https://www.kaggle.com/datasets/harishkumardatalab/housing-price-prediction",
+  "n_total": 545,
+  "n_categorical": 7,
+  "rows": 545,
+  "features": 12
+ },
+ "talent/kin8nm": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=189&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/mauna-loa-atmospheric-co2": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=41187&sort=runs",
+  "n_total": 2225,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/mv": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=344&sort=runs",
+  "n_total": 40768,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/pol_reg": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=201&sort=runs",
+  "n_total": 15000,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 48
+ },
+ "talent/pole": {
+  "source_url": null,
+  "n_total": 14998,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 26
+ },
+ "talent/puma32H": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=308&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 32
+ },
+ "talent/puma8NH": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=225&sort=runs",
+  "n_total": 8192,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 8
+ },
+ "talent/qsar_aquatic_toxicity": {
+  "source_url": "https://archive.ics.uci.edu/dataset/505/qsar+aquatic+toxicity",
+  "n_total": 546,
+  "n_categorical": 0,
+  "rows": 546,
+  "features": 8
+ },
+ "talent/qsar_fish_toxicity": {
+  "source_url": "https://archive.ics.uci.edu/dataset/504/qsar+fish+toxicity",
+  "n_total": 908,
+  "n_categorical": 2,
+  "rows": 908,
+  "features": 6
+ },
+ "talent/satellite_image": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=294&sort=runs",
+  "n_total": 6435,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 36
+ },
+ "talent/sensory": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&sort=runs&order=desc&qualities.NumberOfClasses=lte_1&id=546",
+  "n_total": 576,
+  "n_categorical": 11,
+  "rows": 576,
+  "features": 11
+ },
+ "talent/socmob": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=541&sort=runs",
+  "n_total": 1156,
+  "n_categorical": 4,
+  "rows": 1156,
+  "features": 5
+ },
+ "talent/space_ga": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=507&sort=runs",
+  "n_total": 3107,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/steel_industry_energy_consumption": {
+  "source_url": "https://archive.ics.uci.edu/dataset/851/steel+industry+energy+consumption",
+  "n_total": 35040,
+  "n_categorical": 3,
+  "rows": 2048,
+  "features": 10
+ },
+ "talent/stock": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&sort=runs&order=desc&qualities.NumberOfClasses=lte_1&id=223",
+  "n_total": 950,
+  "n_categorical": 0,
+  "rows": 950,
+  "features": 9
+ },
+ "talent/stock_fardamento02": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42545&sort=runs",
+  "n_total": 6277,
+  "n_categorical": 1,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/sulfur": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=23515&sort=runs",
+  "n_total": 10081,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 6
+ },
+ "talent/topo_2_1": {
+  "source_url": "https://www.openml.org/search?type=data&status=any&sort=runs&order=desc&qualities.NumberOfClasses=lte_1&id=422",
+  "n_total": 8885,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 266
+ },
+ "talent/treasury": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42367&sort=runs",
+  "n_total": 1049,
+  "n_categorical": 0,
+  "rows": 1049,
+  "features": 15
+ },
+ "talent/us_crime": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42730",
+  "n_total": 1994,
+  "n_categorical": 0,
+  "rows": 1994,
+  "features": 126
+ },
+ "talent/volume": {
+  "source_url": "https://archive.ics.uci.edu/dataset/363/facebook+comment+volume+dataset",
+  "n_total": 50993,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 53
+ },
+ "talent/weather_izmir": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=42369&sort=runs",
+  "n_total": 1461,
+  "n_categorical": 0,
+  "rows": 1461,
+  "features": 9
+ },
+ "talent/wind": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=503&sort=runs",
+  "n_total": 6574,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 14
+ },
+ "talent/wine+quality": {
+  "source_url": "https://archive.ics.uci.edu/dataset/186/wine+quality",
+  "n_total": 6497,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 11
+ },
+ "talent/yprop_4_1": {
+  "source_url": "https://www.openml.org/search?type=data&status=active&id=416",
+  "n_total": 8885,
+  "n_categorical": 0,
+  "rows": 2048,
+  "features": 251
+ }
+}

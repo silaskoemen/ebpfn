@@ -33,6 +33,8 @@ pytest = ">=9.1.0,<10"
 hydra-core = ">=1.3.2,<2"
 openml = ">=0.15.1,<0.16"
 pandas = "*"
+structured-data-models = ">=0.2.1, <0.3"
+tabpfn = ">=9.2.0, <10"
 
 [feature.bench.dependencies]
 catboost = ">=1.2.8,<2"  # 1.2.8+ has numpy-2 (<3) builds; 1.2.5 was built against numpy-1 (ABI break)

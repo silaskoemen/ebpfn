@@ -30,6 +30,8 @@ class PredictiveDistribution(Protocol):
 
     def nll(self, outputs: Tensor, y: Tensor, /) -> Tensor: ...
 
+    def coarse_nll(self, outputs: Tensor, y: Tensor, /, *, stride: int) -> Tensor: ...
+
     def training_loss(self, outputs: Tensor, y: Tensor, /) -> Tensor: ...
 
     def crps(self, outputs: Tensor, y: Tensor, /, *, grid_size: int) -> Tensor: ...
@@ -40,11 +42,16 @@ class PredictiveDistribution(Protocol):
 
 
 _DEFAULT_COVERAGE_LEVELS = (0.5, 0.8, 0.9, 0.95)
+# Knot stride for ``nll_coarse``: 999 quantiles read as 100. Raw NLL on the full grid
+# rises 0.1-0.4 nats within ten fine-tuning steps from quantile-gap jitter alone, so
+# deltas against a base are read on this one and on CRPS.
+COARSE_NLL_STRIDE = 10
 
 
 @dataclasses.dataclass(frozen=True)
 class PredictiveMetrics:
     nll: float
+    nll_coarse: float
     crps: float
     mae: float
     rmse: float
@@ -57,6 +64,7 @@ class PredictiveRowMetrics:
     """Per-prediction contributions from one predictive distribution."""
 
     nll: Tensor
+    nll_coarse: Tensor
     crps: Tensor
     mean: Tensor
     absolute_error: Tensor
@@ -79,6 +87,7 @@ def compute_metrics(
     *,
     coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
     crps_grid_size: int = 512,
+    coarse_stride: int = COARSE_NLL_STRIDE,
 ) -> PredictiveMetrics:
     """Aggregate predictive metrics over every (row) prediction in ``outputs``/``y_std``.
 
@@ -92,11 +101,13 @@ def compute_metrics(
         y_std,
         coverage_levels=coverage_levels,
         crps_grid_size=crps_grid_size,
+        coarse_stride=coarse_stride,
     )
     coverage = {level: float(inside.float().mean()) for level, (_, _, inside) in rows.intervals.items()}
 
     return PredictiveMetrics(
         nll=float(rows.nll.mean()),
+        nll_coarse=float(rows.nll_coarse.mean()),
         crps=float(rows.crps.mean()),
         mae=float(rows.absolute_error.mean()),
         rmse=float(torch.sqrt(rows.squared_error.mean())),
@@ -112,6 +123,7 @@ def compute_row_metrics(
     *,
     coverage_levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
     crps_grid_size: int = 512,
+    coarse_stride: int = COARSE_NLL_STRIDE,
 ) -> PredictiveRowMetrics:
     """Return row-level proper-score, point-error, and interval contributions."""
     if crps_grid_size < 2:
@@ -127,6 +139,7 @@ def compute_row_metrics(
         intervals[f"{level:g}"] = (lower, upper, (flat_y >= lower) & (flat_y <= upper))
     return PredictiveRowMetrics(
         nll=distribution.nll(flat_outputs, flat_y),
+        nll_coarse=distribution.coarse_nll(flat_outputs, flat_y, stride=coarse_stride),
         crps=distribution.crps(flat_outputs, flat_y, grid_size=crps_grid_size),
         mean=mean,
         absolute_error=errors.abs(),

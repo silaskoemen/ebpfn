@@ -57,9 +57,13 @@ class NanoTabICLv2(nn.Module):
         self.out_ln = nn.LayerNorm(icl_dim)
         self.out_mlp = get_mlp(icl_dim, icl_dim * 2, out_dim)
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor, return_embedding: bool = False) -> torch.Tensor:
-        n_batch, n_rows, n_cols = x.shape
-        n_batch, n_train = y.shape
+    def forward(
+        self, x: torch.Tensor, y: torch.Tensor, return_embedding: bool = False, row_chunk: int | None = None
+    ) -> torch.Tensor:
+        """``row_chunk`` runs TF_row over that many rows at a time: rows never interact there, so
+        the output is unchanged while peak memory (rows x columns^2 attention) is bounded."""
+        _, n_rows, n_cols = x.shape
+        _, n_train = y.shape
 
         # ----- Embedding: standardize -> repeated feature grouping -> x embedding -> add y embedding to train
         x = (x - x[:, :n_train].mean(dim=1, keepdim=True)) / (
@@ -76,12 +80,8 @@ class NanoTabICLv2(nn.Module):
             emb = block.col_attn(emb, kv_max_idx=n_train)  # ty:ignore[call-non-callable]
 
         # ----- TF_row: concat CLS tokens as extra columns -> row attention -> norm + merge cls tokens
-        emb = torch.cat([self.row_cls_tokens.expand(n_batch, n_rows, -1, -1), emb], dim=2)
-        for block in self.row_blocks[:-1]:
-            emb = block.row_attn(emb)  # ty:ignore[call-non-callable]
-        cls = self.row_cls_tokens.size(-2)
-        emb = self.row_blocks[-1].row_attn(emb, q_max_idx=cls)  # ty:ignore[call-non-callable]  # only cls token values
-        emb = self.row_ln(emb).flatten(-2, -1)  # norm + merge cls tokens into one bigger token
+        chunk = row_chunk or n_rows
+        emb = torch.cat([self._row_stage(emb[:, start : start + chunk]) for start in range(0, n_rows, chunk)], dim=1)
 
         # ----- TF_icl: add y embedding -> self-attention
         # now emb.shape = (n_batch, n_rows, icl_dim)
@@ -94,6 +94,15 @@ class NanoTabICLv2(nn.Module):
         if return_embedding:
             return emb  # in-context embedding z: (n_batch, n_test, icl_dim)
         return self.out_mlp(emb)  # output MLP
+
+    def _row_stage(self, emb: torch.Tensor) -> torch.Tensor:
+        n_batch, n_rows = emb.shape[:2]
+        emb = torch.cat([self.row_cls_tokens.expand(n_batch, n_rows, -1, -1), emb], dim=2)
+        for block in self.row_blocks[:-1]:
+            emb = block.row_attn(emb)  # ty:ignore[call-non-callable]
+        cls = self.row_cls_tokens.size(-2)
+        emb = self.row_blocks[-1].row_attn(emb, q_max_idx=cls)  # ty:ignore[call-non-callable]  # only cls token values
+        return self.row_ln(emb).flatten(-2, -1)  # norm + merge cls tokens into one bigger token
 
 
 class ClassEmbedding(nn.Embedding):

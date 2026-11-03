@@ -122,3 +122,28 @@ def test_icdf_rejects_out_of_range_level(dist):
     values = normal_quantiles(dist.levels).expand(2, 999)
     with pytest.raises(ValueError, match=r"strictly in \(0, 1\)"):
         dist.icdf(values, 1.0)
+
+
+def test_coarse_nll_matches_nll_on_a_smooth_grid(dist):
+    values = normal_quantiles(dist.levels).expand(512, 999)
+    y = torch.randn(512)
+    torch.testing.assert_close(dist.coarse_nll(values, y, stride=1), dist.nll(values, y))
+    assert float(dist.coarse_nll(values, y, stride=10).mean()) == pytest.approx(
+        float(dist.nll(values, y).mean()), abs=0.01
+    )
+
+
+def test_coarse_nll_is_robust_to_knot_jitter(dist):
+    """Jitter far below the distribution's scale inflates raw NLL, not the coarse one."""
+    smooth = normal_quantiles(dist.levels).expand(512, 999)
+    jittered = smooth + 2e-3 * torch.randn(512, 999, generator=torch.Generator().manual_seed(0))
+    y = torch.randn(512, generator=torch.Generator().manual_seed(1))
+    reference = float(dist.nll(smooth, y).mean())
+    assert float(dist.nll(jittered, y).mean()) - reference > 0.1
+    assert abs(float(dist.coarse_nll(jittered, y, stride=10).mean()) - reference) < 0.02
+
+
+def test_coarse_nll_rejects_a_stride_that_leaves_one_knot(dist):
+    values = normal_quantiles(dist.levels).expand(2, 999)
+    with pytest.raises(ValueError, match="fewer than two"):
+        dist.coarse_nll(values, torch.zeros(2), stride=999)
